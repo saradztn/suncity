@@ -150,11 +150,13 @@ float4 PixelShaderFunction(PSInput PS) : COLOR0
         col += float3(0.86, 0.9, 1.0) * mdisc * shade * 1.15 * night;
         col += float3(0.5, 0.6, 0.82) * pow(saturate(mmu), 20.0) * 0.10 * night;
         float2 su = float2(atan2(dir.y, dir.x) * 3.8197, asin(clamp(dir.z, -1.0, 1.0)) * 3.8197);
-        float2 g = floor(su * 22.0);
-        float h = hash21(g);
-        float star = smoothstep(0.994, 1.0, h);
+        float2 sg = su * 30.0;
+        float2 g = floor(sg);
+        float2 f = frac(sg) - 0.5;                                    // a small round point inside each lit cell,
+        float h = hash21(g);                                           // never the whole cell (that reads as a white square)
+        float star = smoothstep(0.991, 1.0, h) * smoothstep(0.16, 0.015, dot(f, f));
         float tw = 0.55 + 0.45 * sin(gTime * (1.2 + h * 2.4) + h * 31.0);
-        col += float3(0.85, 0.9, 1.0) * star * tw * night * smoothstep(0.02, 0.25, dir.z);
+        col += float3(0.85, 0.9, 1.0) * (star * tw * 1.7 * night * smoothstep(0.02, 0.25, dir.z));
     }
 
     // ---- clouds: two layers, lit toward the sun, silver lining, dark bases

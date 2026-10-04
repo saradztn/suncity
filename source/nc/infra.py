@@ -141,7 +141,7 @@ def bridge_cable(span, cls='A', seed=0, pylon_h=92.0, water=None):
                 yd = sd * (7.0 + 6.4 * k)
                 if abs(yd) > (water or span) / 2 - 2:
                     continue
-                M.tube(np.array([(x_leg, sd * 0.8, zt), (x_deck, yd, CURB + 1.2)]), 0.11, 4, 'nc_strip_white', tile=(4, 1), caps=False, emis=0.7, smooth=False)
+                M.tube(np.array([(x_leg, sd * 0.8, zt), (x_deck, yd, CURB + 1.2)]), 0.11, 4, 'nc_steel', tile=(4, 1), caps=False, emis=0.12, smooth=False)
     M.light((0, 0, ph * 0.6), P.COOL, 3.0, 80.0)
     meta.update(h=float(ph + 6), dist=800.0, hero=True)
     return M, C, meta

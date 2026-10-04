@@ -149,7 +149,7 @@ float4 PixelShaderFunction(PSInput PS) : COLOR0
 
     // ---- dynamic lighting: baked night light (kept at night) + sky ambient + wrapped sun diffuse
     float ndl = dot(N, gSunDir);
-    float3 sunD = gSunColor * (gSunI * saturate(ndl * 0.72 + 0.28));
+    float3 sunD = gSunColor * (gSunI * 1.30 * saturate(ndl * 0.62 + 0.42));   // wrapped: daylight fills the facades
     float3 baseCol = tex.rgb * (vcol * gNightKeep + gAmbient + sunD);
 
     // ---- night emissive: windows / neon / signs (bright texels) glow after dark
