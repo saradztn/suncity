@@ -350,7 +350,12 @@ def(C, "dxCreateScreenSource", "nn", function(w, h)
     if w < 1 or h < 1 then error("dxCreateScreenSource: bad size", 2) end
     return newEl("screensource", { w = w, h = h, updates = 0 }, resourceRoot)
 end)
-def(C, "dxUpdateScreenSource", "e|b", function(s) if s.kind ~= "screensource" then error("not a screen source", 2) end s.updates = s.updates + 1 return true end)
+def(C, "dxUpdateScreenSource", "e|b", function(s, resample)
+    if s.kind ~= "screensource" then error("not a screen source", 2) end
+    s.updates = s.updates + 1
+    if resample ~= nil then s.resample = resample end
+    return true
+end)
 def(C, "dxSetShaderValue", "es*", function(sh, name, ...)
     if sh.kind ~= "shader" then error("dxSetShaderValue: not a shader", 2) end
     local vars = T.fxvars[sh.path]
@@ -374,12 +379,17 @@ def(C, "dxDrawMaterialLine3D", "nnnnnnen|nbnnn", function(x1, y1, z1, x2, y2, z2
 end)
 def(C, "engineApplyShaderToWorldTexture", "es|eb", function(sh, name)
     if sh.kind ~= "shader" then error("not a shader", 2) end
-    if not (T.textures[name] or T.vanilla[name]) then error("engineApplyShaderToWorldTexture: no texture named '" .. name .. "' in any TXD of this resource", 2) end
+    -- wildcard patterns apply to the vanilla map textures (WetStreets); exact names must exist in a TXD
+    if not (string.find(name, "*", 1, true) or T.textures[name] or T.vanilla[name]) then
+        error("engineApplyShaderToWorldTexture: no texture named '" .. name .. "' in any TXD of this resource", 2)
+    end
     sh.textures[name] = true
     return true
 end)
 def(C, "engineRemoveShaderFromWorldTexture", "es|e", function(sh, name)
-    if not (T.textures[name] or T.vanilla[name]) then error("engineRemoveShaderFromWorldTexture: no texture named '" .. name .. "'", 2) end
+    if not (string.find(name, "*", 1, true) or T.textures[name] or T.vanilla[name]) then
+        error("engineRemoveShaderFromWorldTexture: no texture named '" .. name .. "'", 2)
+    end
     sh.textures[name] = nil
     return true
 end)
@@ -404,6 +414,19 @@ def(C, "setFarClipDistance", "n", function(d) rangeCheck("setFarClipDistance", d
 def(C, "resetFarClipDistance", "", function() T.world.far = nil return true end)
 def(C, "setRainLevel", "n", function(l) rangeCheck("setRainLevel", l, 0, 1) T.world.rain = l return true end)
 def(C, "resetRainLevel", "", function() T.world.rain = nil return true end)
+def(C, "getRainLevel", "", function() return T.world.rain or 0 end)
+def(C, "getScreenFromWorldPosition", "nnn|nb", function(x, y, z)
+    if T.sunScreen then return T.sunScreen[1], T.sunScreen[2] end
+    return false
+end)
+def(C, "engineGetVisibleTextureNames", "s", function(pat)
+    if type(pat) ~= "string" then error("engineGetVisibleTextureNames: bad pattern", 2) end
+    return { "stub_" .. pat:gsub("%*", "x"), "stub2_" .. pat:gsub("%*", "y") }
+end)
+def(C, "fileExists", "s", function(p)
+    if type(p) ~= "string" then error("fileExists: bad path", 2) end
+    return (T.files or {})[p] and true or false
+end)
 def(C, "setWindVelocity", "nnn", function(x, y, z) T.world.wind = { x, y, z } return true end)
 def(C, "resetWindVelocity", "", function() T.world.wind = nil return true end)
 def(C, "setHeatHaze", "n|nnnnnnb", function(i) T.world.haze = i return true end)

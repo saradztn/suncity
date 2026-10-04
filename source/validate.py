@@ -709,6 +709,91 @@ for y in np.arange(TUN['cov0'] + 2.0, TUN['cov1'] - 2.0, 5.0):
 check(walls == 0, 'both tunnel walls are solid along the whole covered part (%d gaps)' % walls)
 
 # ====================================================================================================================================
+section('WetStreets companion resource')
+WS_SRC_DIR = os.path.join(HERE, 'WetStreets')
+WS_RES = os.path.abspath(os.environ.get('NC_WS_RES') or os.path.join(HERE, '..', 'resource', 'WetStreets'))
+
+
+def rdws(f):
+    return open(os.path.join(WS_SRC_DIR, f), encoding='utf8').read()
+
+
+check(os.path.isdir(WS_SRC_DIR) and os.path.isdir(WS_RES), 'source/WetStreets and resource/WetStreets both exist')
+wmeta = ET.parse(os.path.join(WS_SRC_DIR, 'meta.xml')).getroot()
+wscripts = [(e.get('src'), e.get('type')) for e in wmeta.findall('script')]
+wfiles = [e.get('src') for e in wmeta.findall('file')]
+check(('env.lua', 'client') in wscripts and ('wetstreets.lua', 'client') in wscripts and wscripts[0][0] == 'env.lua',
+      'env.lua before wetstreets.lua (WS_ENV must exist first)')
+check(sorted(wfiles) == ['post.fx', 'wet.fx'], 'the two shaders ship as <file> entries')
+check(all(os.path.exists(os.path.join(WS_SRC_DIR, f)) for f in wfiles + [s for s, _ in wscripts]), 'every listed script / file exists in source/WetStreets')
+check(all(os.path.exists(os.path.join(WS_RES, f)) for f in wfiles + [s for s, _ in wscripts]), 'build output resource/WetStreets is complete')
+check(all(rdws(f) == open(os.path.join(WS_RES, f), encoding='utf8').read() for f in wfiles + [s for s, _ in wscripts]),
+      'build output is a byte copy of source/ (build.py copy step ran)')
+LW = L
+for f in ('env.lua', 'wetstreets.lua'):
+    good, err = chk(rdws(f), f)
+    check(good, 'Lua 5.1 syntax of %s %s' % (f, err))
+mta_lua_static.RES = WS_RES
+problems, used, _ = mta_lua_static.check(['env.lua', 'wetstreets.lua'], mta_lua_static.CLIENT_API, 'wetstreets')
+check(not problems, 'WetStreets static Lua check: no undefined globals / wrong-side calls / unknown MTA functions %s' % problems[:3])
+ok('wetstreets: %d distinct MTA functions, all exist in the MTA client API' % len(used))
+mta_lua_static.RES = os.path.join(HERE, '..', 'resource', 'NightCity')
+
+WSFX = {}
+for fx in sorted(wfiles):
+    src = rdws(fx)
+    code = re.sub(r'/\*.*?\*/', '', re.sub(r'//[^\n]*', '', src), flags=re.S)
+    WSFX[fx] = code
+    check(code.count('{') == code.count('}') and code.count('(') == code.count(')'), 'WetStreets %s: balanced braces and parentheses' % fx)
+    check(re.search(r'technique\s+tec0', code) is not None and re.search(r'technique\s+fallback', code) is not None,
+          'WetStreets %s: technique tec0 plus an empty fallback technique' % fx)
+    targets = re.findall(r'compile\s+(\w+)\s+(\w+)\(', code)
+    funcs = set(re.findall(r'^\s*\w+\s+(\w+)\s*\(', code, re.M))
+    check(targets and all(t in ('vs_2_0', 'vs_3_0', 'ps_2_0', 'ps_3_0') and fn in funcs for t, fn in targets),
+          'WetStreets %s: compile targets %s refer to defined functions' % (fx, targets))
+    for fn in sorted(set(re.findall(r'compile\s+ps_2_0\s+(\w+)\s*\(', code))):
+        i = code.find('float4 %s(' % fn)
+        body = code[i:code.find('\n}', i)] if i >= 0 else ''
+        heavy = len(re.findall(r'\b(?:pow|sin|cos|tan|asin|acos|atan2?|exp2?|log2?|sqrt|rsq|rcp|normalize|reflect|smoothstep)\s*\(', body))
+        check(heavy <= 12, 'WetStreets %s: %s is lean for the ps_2_0 target (%d transcendental calls)' % (fx, fn, heavy))
+    for m in re.finditer(r'\batan\s*\(', code):
+        close = code.find(')', m.end())
+        seg = code[m.end():close if close > 0 else m.end() + 40]
+        check(',' not in seg, 'WetStreets %s: atan() takes one argument - use atan2() for the two-argument form' % fx)
+ws_cl = rdws('wetstreets.lua')
+ws_vars = {fx: set(re.findall(r'^(?:float\d?(?:x\d)?|texture|int|bool)\s+(\w+)\s*[:=;<]', WSFX[fx], re.M)) for fx in WSFX}
+for var in sorted(set(re.findall(r'dxSetShaderValue\(\s*[\w.]+,\s*"(\w+)"', ws_cl))):
+    check(any(var in v for v in ws_vars.values()), 'the script sets the shader variable "%s" which exists in a WetStreets .fx file' % var)
+check('dxUpdateScreenSource(WS.src, true)' in ws_cl, 'the grade pass captures the frame with resample=true (no feedback loop)')
+m_vs = re.search(r'struct\s+VSOutput\s*\{([^}]*)\}', WSFX['wet.fx'])
+m_ps = re.search(r'struct\s+PSInput\s*\{([^}]*)\}', WSFX['wet.fx'])
+sem_vs = set(re.findall(r':\s*(\w+)\s*;', m_vs.group(1)))
+sem_ps = set(re.findall(r':\s*(\w+)\s*;', m_ps.group(1)))
+check(sem_ps <= sem_vs, 'WetStreets wet.fx: every pixel shader input is produced by the vertex shader (%s)' % sorted(sem_ps - sem_vs))
+shared = ws_vars['wet.fx'] & ws_vars['post.fx']
+check(len(shared) >= 20, 'wet.fx and post.fx share the environment uniform block (%d shared names)' % len(shared))
+try:
+    import slangpy
+    dev = slangpy.Device(type=slangpy.DeviceType.cpu, enable_debug_layers=False)
+    sess = dev.slang_session
+    for fx, code in WSFX.items():
+        s = code
+        s = re.sub(r'technique\s+\w+\s*\{(?:[^{}]|\{[^{}]*\})*\}', '', s)
+        samplers = re.findall(r'sampler\s+(\w+)\s*=\s*sampler_state', s)
+        s = re.sub(r'sampler\s+\w+\s*=\s*sampler_state\s*\{[^}]*\}\s*;', '', s)
+        s = re.sub(r'texture\s+\w+\s*(?:<[^>]*>)?\s*;', '', s)
+        s = re.sub(r'^((?:float\d?(?:x\d)?)\s+\w+)\s*:\s*\w+\s*;', r'\1;', s, flags=re.M)
+        s = re.sub(r'tex2D\(\s*(\w+)\s*,', r'T_\1.Sample(S_\1,', s)
+        s = ''.join('Texture2D T_%s; SamplerState S_%s;\n' % (n, n) for n in samplers) + s
+        try:
+            sess.load_module_from_source('ws_fx_' + fx.replace('.', '_'), s)
+            check(True, 'WetStreets %s: type-checked by the Slang compiler front-end' % fx)
+        except Exception as e:
+            check(False, 'WetStreets %s: Slang front-end rejected the shader: %s' % (fx, str(e)[:400]))
+except ImportError:
+    warn('slangpy not installed: WetStreets shader bodies were only linted')
+
+# ====================================================================================================================================
 section('budgets')
 tot = sum(os.path.getsize(os.path.join(root_, f)) for root_, _, fs in os.walk(RES) for f in fs)
 check(tot < 128 * 1048576, 'resource size %.1f MB (< 128 MB)' % (tot / 1048576))
@@ -744,6 +829,9 @@ if '--lua' in sys.argv:
     r = subprocess.run([sys.executable, os.path.join(HERE, 'mta_lua_test_nc.py')], capture_output=True, text=True, env=dict(os.environ, NC_RES=RES))
     last = [ln for ln in r.stdout.splitlines() if ln.startswith('== result')]
     check(r.returncode == 0, 'mta_lua_test_nc.py: %s' % (last[0] if last else r.stderr[-300:]))
+    r = subprocess.run([sys.executable, os.path.join(HERE, 'mta_lua_test_wet.py')], capture_output=True, text=True, env=dict(os.environ, NC_WS_RES=WS_RES))
+    last = [ln for ln in r.stdout.splitlines() if ln.startswith('== result')]
+    check(r.returncode == 0, 'mta_lua_test_wet.py: %s' % (last[0] if last else r.stderr[-300:]))
 
 print('\n== %d checks passed, %d failed, %d warnings ==' % (npass[0], len(fails), len(warns)))
 for f in fails:

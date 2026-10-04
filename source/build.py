@@ -26,6 +26,21 @@ TXD_OF = {'g': 'ncg', 'b': 'ncb', 'i': 'nci', 's': 'nci'}
 ALPHA_MATS = {'nc_glow', 'nc_steam'}
 SRC_SCRIPTS = ['client.lua', 'env.lua', 'tour.lua', 'server.lua']
 SRC_FX = ['wet.fx', 'post.fx', 'sky.fx', 'water.fx']
+WS_SRC = ['meta.xml', 'env.lua', 'wetstreets.lua', 'wet.fx', 'post.fx', 'README.md']
+
+
+def copy_wetstreets():
+    """pack the standalone WetStreets companion resource (source/WetStreets -> resource/WetStreets)."""
+    src = os.path.join(HERE, 'WetStreets')
+    dst = os.path.join(OUT, 'resource', 'WetStreets')
+    os.makedirs(dst, exist_ok=True)
+    n = 0
+    for f in WS_SRC:
+        p = os.path.join(src, f)
+        if os.path.isfile(p):
+            shutil.copyfile(p, os.path.join(dst, f))
+            n += 1
+    print('WetStreets: %d files -> %s' % (n, dst))
 
 
 def weld(pos, nrm, uv, dcol, tris):
@@ -109,6 +124,7 @@ def rot(x, y, rz):
 
 def main():
     t0 = time.time()
+    copy_wetstreets()
     for d in ('files', 'files/audio', 'files/fx'):
         os.makedirs(os.path.join(RES, d), exist_ok=True)
     for f in os.listdir(os.path.join(RES, 'files')):
