@@ -177,6 +177,11 @@ warm highlights), dual polar vignette, 5-tap chromatic aberration ramping to the
 time-hashed film grain, and **god rays**: radial blur of the bright frame toward the sun's screen
 position with a horizontal gate (so the towers break the rays into shafts).
 
+The ray march is **per-pixel dithered** (interleaved-gradient offset along the march, 12 samples).
+Without the dither every bright sky pixel smears into the same 8 discrete positions and the fan of
+rays reads as scratchy diagonal **lines across the sky** (worst at sunrise / sunset).  Never reduce
+the sample count without keeping the dither.
+
 The grade samples `gScreen` = a `dxCreateScreenSource` of the frame.  **The capture must be
 `dxUpdateScreenSource(FX.src, true)`** — with the default `false` MTA delivers the *previous* frame's
 end-of-frame image, which already includes the grade pass: every frame re-grades its own output and
@@ -228,5 +233,27 @@ Failure behaviour at runtime:
 * **neon punch** — `nightGlow` per key + `gSurface.e` per class + `NC_SURFACES` grouping;
 * **rain feel** — `WEATHERS` table (cover/rain/wetT/fog/flash) + the soak/dry rates in `stepWet`;
 * **blue hour length** — the `dawn`/`blue`/`night` key hours;
-* **god rays** — `k.mie` + `rayStrength` weighting in `NC_ENV.uniforms()`;
-* **reflections** — `GROUP_PARAMS` in `client.lua` and the Fresnel constants at the top of `wet.fx`.
+* **god rays** — `k.mie` + `rayStrength` weighting in `NC_ENV.uniforms()` (keep the march dither in `post.fx`);
+* **reflections** — `GROUP_PARAMS` in `client.lua` and the Fresnel constants at the top of `wet.fx`;
+* **ped / vehicle light** — `setWorldProperty` block in `NC_ENV.apply()` (section 13);
+* **noon exposure ceiling** — the soft-knee `light` ceiling in `wet.fx` + `exposure` at the `noon` key.
+
+## 13. Vanilla dynamic lighting (peds / vehicles)
+
+Peds and vehicles are **not** covered by the city shaders: they are lit by GTA's dynamic pipeline,
+which is driven by the vanilla timecycle and used to fight the NightCity look (at high sun the
+vertical surfaces receive almost no directional light and the player / cars go black silhouettes;
+at other hours the vanilla ambient did not match the scene).  `NC_ENV.apply()` therefore drives the
+lighting terms directly through MTA 1.6 `setWorldProperty` (pcall-guarded for older clients):
+
+| property | value | effect |
+|---|---|---|
+| `AmbientColor`   | `k.amb * c.dim`           | ambient on map objects (incl. custom without a shader) |
+| `AmbientObjColor`| `k.amb * c.dim * 1.25 + 16` | ambient on peds / vehicles — the `+16` keeps them readable at night |
+| `DirectionalColor` | `k.sun` (0-255)         | colour of direct light on peds / vehicles |
+| `Illumination`   | `k.sunI * (0.35 + 0.65 * c.dim)` | same sun-intensity mapping the shaders get (`gSunI`) |
+
+Together this makes the vanilla-lit elements follow the same timecycle as the city at every hour
+(night: ambient only; noon: strong white sun with the ambient floor).  The stub models the property
+names / value ranges (`mta_stub_nc.lua`), and the runtime test asserts the floor and the day/night
+behaviour (`mta_lua_test_nc.py`).

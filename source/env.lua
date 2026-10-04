@@ -48,7 +48,7 @@ local KEYS = {
     { h = 8.5, name = "morning", zen = { 0.22, 0.40, 0.72 }, hor = { 0.62, 0.66, 0.72 }, sun = { 1.0, 0.94, 0.82 }, sunI = 0.92,
       amb = { 0.30, 0.33, 0.38 }, nightKeep = 0.30, nightGlow = 0.10, exposure = 1.0, mie = 0.55, haze = 0.42, water = { 0.09, 0.15, 0.20 } },
     { h = 12.5, name = "noon", zen = { 0.25, 0.45, 0.82 }, hor = { 0.68, 0.74, 0.80 }, sun = { 1.0, 0.98, 0.92 }, sunI = 1.12,
-      amb = { 0.36, 0.40, 0.46 }, nightKeep = 0.22, nightGlow = 0.0, exposure = 0.95, mie = 0.42, haze = 0.36, water = { 0.08, 0.15, 0.21 } },
+      amb = { 0.36, 0.40, 0.46 }, nightKeep = 0.22, nightGlow = 0.0, exposure = 0.88, mie = 0.42, haze = 0.36, water = { 0.08, 0.15, 0.21 } },
     { h = 16.5, name = "afternoon", zen = { 0.23, 0.41, 0.74 }, hor = { 0.68, 0.68, 0.70 }, sun = { 1.0, 0.92, 0.76 }, sunI = 0.95,
       amb = { 0.32, 0.33, 0.37 }, nightKeep = 0.28, nightGlow = 0.08, exposure = 1.0, mie = 0.52, haze = 0.42, water = { 0.09, 0.15, 0.20 } },
     { h = 18.3, name = "golden", zen = { 0.20, 0.30, 0.55 }, hor = { 0.92, 0.55, 0.28 }, sun = { 1.0, 0.72, 0.40 }, sunI = 0.68,
@@ -306,6 +306,18 @@ function NC_ENV.apply()
     pcall(setHeatHaze, 0)
     pcall(setWindVelocity, 0.6 * c.wind / 12.0, 0.2 * c.wind / 12.0, 0.0)
     pcall(setRainLevel, (NC_ENV.tunnel and 0 or rain))
+    -- lighting of dynamically created elements (peds / vehicles) and of map objects: GTA's default
+    -- timecycle fights the NightCity look and goes near-black at high sun (the vertical surfaces get
+    -- no directional light at noon).  MTA 1.6 setWorldProperty lets us drive the exact terms from the
+    -- same timecycle the shaders use - pcall keeps older clients safe.
+    local dirI = k.sunI * (0.35 + 0.65 * c.dim)
+    pcall(setWorldProperty, "AmbientColor",
+        math.floor(clamp(k.amb[1] * c.dim, 0, 1) * 255), math.floor(clamp(k.amb[2] * c.dim, 0, 1) * 255), math.floor(clamp(k.amb[3] * c.dim, 0, 1) * 255))
+    pcall(setWorldProperty, "AmbientObjColor",
+        math.floor(clamp(k.amb[1] * c.dim * 1.25, 0, 1) * 255 + 16), math.floor(clamp(k.amb[2] * c.dim * 1.25, 0, 1) * 255 + 16), math.floor(clamp(k.amb[3] * c.dim * 1.25, 0, 1) * 255 + 16))
+    pcall(setWorldProperty, "DirectionalColor",
+        math.floor(clamp(k.sun[1], 0, 1) * 255), math.floor(clamp(k.sun[2], 0, 1) * 255), math.floor(clamp(k.sun[3], 0, 1) * 255))
+    pcall(setWorldProperty, "Illumination", math.max(0, dirI))
     if S.vanillaSun then
         pcall(setSunSize, math.floor(k.sunI * 16 + 0.5))
         pcall(setSunColor, math.floor(clamp(k.sun[1], 0, 1) * 255), math.floor(clamp(k.sun[2], 0, 1) * 255), math.floor(clamp(k.sun[3], 0, 1) * 255))

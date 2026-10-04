@@ -415,6 +415,32 @@ def(C, "resetFarClipDistance", "", function() T.world.far = nil return true end)
 def(C, "setRainLevel", "n", function(l) rangeCheck("setRainLevel", l, 0, 1) T.world.rain = l return true end)
 def(C, "resetRainLevel", "", function() T.world.rain = nil return true end)
 def(C, "getRainLevel", "", function() return T.world.rain or 0 end)
+def(C, "setWorldProperty", "s*", function(prop, ...)
+    local v = { ... }
+    local names = { AmbientColor = "rgb", AmbientObjColor = "rgb", DirectionalColor = "rgb", Illumination = "num",
+                    SpriteSize = "num", SpriteBrightness = "num", LightsOnGround = "num", ShadowStrength = "num",
+                    PoleShadowStrength = "num", ShadowsOffset = "num", BottomCloudsColor = "rgb", CloudsAlpha = "num",
+                    LowCloudsColor = "rgb", WetRoads = "num", Foggyness = "num", Fog = "num", RainFog = "num",
+                    WaterFog = "num", Rainbow = "num", Sandstorm = "num" }
+    local kind = names[prop]
+    if not kind then error("setWorldProperty: unknown property '" .. tostring(prop) .. "'", 2) end
+    if kind == "rgb" then
+        if #v ~= 3 then error("setWorldProperty: " .. prop .. " needs 3 values", 2) end
+        for _, x in ipairs(v) do
+            if type(x) ~= "number" or x < 0 or x > 255 then error("setWorldProperty: " .. prop .. " value out of range", 2) end
+        end
+    else
+        if #v ~= 1 or type(v[1]) ~= "number" then error("setWorldProperty: " .. prop .. " needs 1 numeric value", 2) end
+    end
+    T.world.props = T.world.props or {}
+    T.world.props[prop] = v
+    return true
+end)
+def(C, "getWorldProperty", "s", function(prop)
+    local v = (T.world.props or {})[prop]
+    if not v then return false end
+    return unpack(v)
+end)
 def(C, "getScreenFromWorldPosition", "nnn|nb", function(x, y, z)
     if T.sunScreen then return T.sunScreen[1], T.sunScreen[2] end
     return false

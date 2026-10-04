@@ -159,6 +159,11 @@ check(world(T, 'clouds') is False and world(T, 'birds') is False and world(T, 'a
 check(world(T, 'occlusions') is False, 'vanilla occlusions off')
 check(abs(float(world(T, 'rain')) - 1.0) < 1e-6, 'rain level 1 outside the tunnel')
 check(world(T, 'sky') is not None, 'sky gradient set')
+props = world(T, 'props')
+check(props is not None and props['AmbientObjColor'] is not None and float(props['AmbientObjColor'][1]) >= 16 and float(props['AmbientObjColor'][3]) >= 16,
+      'ped / vehicle ambient light keeps a visibility floor at night (setWorldProperty AmbientObjColor)')
+check(props is not None and props['DirectionalColor'] is not None and float(props['Illumination'][1]) == 0.0,
+      'night: directional light on peds / vehicles is off (Illumination 0)')
 check(T.chatContains('objects.'), 'welcome message printed')
 check(not errors(T), 'no handler / timer error during loading: %s' % errors(T)[:2])
 
@@ -222,6 +227,10 @@ check(T.hour == 3 and T.minute == 0, '/nctime 3 -> 03:00 (frozen clock)')
 T.cmd('client', 'nctime', '0')
 adv(T, 1100)
 check(T.hour == 0, '/nctime 0')
+T.cmd('client', 'nctime', '13')
+adv(T, 1100)
+check(world(T, 'props') is not None and float(T.world.props['Illumination'][1]) > 0.3,
+      'noon: directional light on peds / vehicles follows the timecycle (Illumination > 0.3)')
 # /setz: the city deck height
 obj = T.firstObject()
 za = float(obj.z)

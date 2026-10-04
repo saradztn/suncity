@@ -32,7 +32,7 @@ local KEYS = {
     { h = 8.5, name = "morning", zen = { 0.22, 0.40, 0.72 }, hor = { 0.62, 0.66, 0.72 }, sun = { 1.0, 0.94, 0.82 }, sunI = 0.92,
       amb = { 0.30, 0.33, 0.38 }, nightKeep = 0.30, nightGlow = 0.10, exposure = 1.0, mie = 0.55, haze = 0.42, water = { 0.09, 0.15, 0.20 } },
     { h = 12.5, name = "noon", zen = { 0.25, 0.45, 0.82 }, hor = { 0.68, 0.74, 0.80 }, sun = { 1.0, 0.98, 0.92 }, sunI = 1.12,
-      amb = { 0.36, 0.40, 0.46 }, nightKeep = 0.22, nightGlow = 0.0, exposure = 0.95, mie = 0.42, haze = 0.36, water = { 0.08, 0.15, 0.21 } },
+      amb = { 0.36, 0.40, 0.46 }, nightKeep = 0.22, nightGlow = 0.0, exposure = 0.88, mie = 0.42, haze = 0.36, water = { 0.08, 0.15, 0.21 } },
     { h = 16.5, name = "afternoon", zen = { 0.23, 0.41, 0.74 }, hor = { 0.68, 0.68, 0.70 }, sun = { 1.0, 0.92, 0.76 }, sunI = 0.95,
       amb = { 0.32, 0.33, 0.37 }, nightKeep = 0.28, nightGlow = 0.08, exposure = 1.0, mie = 0.52, haze = 0.42, water = { 0.09, 0.15, 0.20 } },
     { h = 18.3, name = "golden", zen = { 0.20, 0.30, 0.55 }, hor = { 0.92, 0.55, 0.28 }, sun = { 1.0, 0.72, 0.40 }, sunI = 0.68,

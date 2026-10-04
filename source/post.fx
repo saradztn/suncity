@@ -81,17 +81,23 @@ float3 sunRays(float2 uv)
 {
     float2 d = gSunScreen - uv;
     float2 p = uv;
-    float2 st = d * 0.115;
+    float2 st = d * 0.077;
+    // per-pixel interleaved-gradient dither along the march: with plain 8-step sampling every
+    // bright sky pixel smears into the same discrete positions and the fan of rays shows as
+    // scratchy LINES across the sky.  Offsetting each pixel's march turns those coherent spokes
+    // into high-frequency noise the eye averages out.
+    float jit = frac(52.9829189 * frac(dot(uv, float2(0.06711056, 0.00583715))));
+    p += st * jit;
     float3 acc = float3(0.0, 0.0, 0.0);
     float w = 1.0;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 12; i++)
     {
         p += st;
         float3 s = tex2D(S0, p).rgb;
         acc += max(s - 0.42, 0.0) * w;
-        w *= 0.86;
+        w *= 0.88;
     }
-    return acc * 0.22;
+    return acc * 0.16;
 }
 
 float4 PixelShaderFull(float2 uv : TEXCOORD0) : COLOR0
