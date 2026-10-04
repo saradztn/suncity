@@ -174,13 +174,19 @@ class: wetness factor, reflectivity, specular, gloss, ripple amount, emissive bo
 
 Filmic tone curve (per-channel with a luminance knee), the blue-hour split tone (cool shadows,
 warm highlights), dual polar vignette, 5-tap chromatic aberration ramping to the corners,
-time-hashed film grain, and **god rays**: radial blur of the bright frame toward the sun's screen
-position with a horizontal gate (so the towers break the rays into shafts).
+time-hashed film grain, and **god rays** in two parts (the volumetric reference look):
 
-The ray march is **per-pixel dithered** (interleaved-gradient offset along the march, 12 samples).
-Without the dither every bright sky pixel smears into the same 8 discrete positions and the fan of
-rays reads as scratchy diagonal **lines across the sky** (worst at sunrise / sunset).  Never reduce
-the sample count without keeping the dither.
+* **sun glow** — a two-gaussian analytic halo around the sun's screen position (tight core +
+  wide haze ball), tinted by `gSunColor`;
+* **sun shafts** — radial smear of the frame toward the sun: 19 dithered samples (per-pixel
+  interleaved-gradient offset), weighted by the **quadratic luma excess above 0.62** so only
+  genuinely bright pixels smear.  Smearing the whole sky drags the sky-noise into radial scratchy
+  LINES across the sky (the historical "lines in the sky" bug); the high quadratic gate is what
+  keeps the shafts clean.  Geometry between the pixel and the sun darkens the march and breaks it
+  into shafts by itself (crepuscular rays).
+
+Both terms scale with `rayK = gRayStrength * (0.22 + 0.78 * saturate(gSunI * 1.4))`, so they fade
+out at night and in overcast weather.  Never lower the luma gate or drop the dither.
 
 The grade samples `gScreen` = a `dxCreateScreenSource` of the frame.  **The capture must be
 `dxUpdateScreenSource(FX.src, true)`** — with the default `false` MTA delivers the *previous* frame's

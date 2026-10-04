@@ -77,27 +77,32 @@ float3 gradeColorLite(float3 c, float2 uv)
     return c;
 }
 
+// God rays: radial smear of the BRIGHT CORE of the frame toward the sun's screen position.
+// The reference look (soft volumetric shafts, e.g. light streaming past a tower) needs two things
+// the naive version got wrong:
+//   * only genuinely bright pixels may smear (quadratic excess above 0.62 luma).  Smearing the
+//     whole sky drags the sky-noise into radial scratchy LINES - the "lines in the sky" bug.
+//   * a per-pixel dithered march (interleaved-gradient offset) so the finite sample steps never
+//     show as discrete spokes.
+// Geometry between the pixel and the sun darkens the march and breaks it into shafts by itself.
 float3 sunRays(float2 uv)
 {
     float2 d = gSunScreen - uv;
     float2 p = uv;
-    float2 st = d * 0.077;
-    // per-pixel interleaved-gradient dither along the march: with plain 8-step sampling every
-    // bright sky pixel smears into the same discrete positions and the fan of rays shows as
-    // scratchy LINES across the sky.  Offsetting each pixel's march turns those coherent spokes
-    // into high-frequency noise the eye averages out.
+    float2 st = d * 0.052;
     float jit = frac(52.9829189 * frac(dot(uv, float2(0.06711056, 0.00583715))));
     p += st * jit;
     float3 acc = float3(0.0, 0.0, 0.0);
     float w = 1.0;
-    for (int i = 0; i < 12; i++)
+    for (int i = 0; i < 19; i++)
     {
         p += st;
         float3 s = tex2D(S0, p).rgb;
-        acc += max(s - 0.42, 0.0) * w;
-        w *= 0.88;
+        float ex = max(dot(s, float3(0.299, 0.587, 0.114)) - 0.62, 0.0);
+        acc += s * (ex * ex) * w;
+        w *= 0.90;
     }
-    return acc * 0.16;
+    return acc * (0.45 / (1.0 + dot(d, d) * 1.4));
 }
 
 float4 PixelShaderFull(float2 uv : TEXCOORD0) : COLOR0
@@ -110,7 +115,12 @@ float4 PixelShaderFull(float2 uv : TEXCOORD0) : COLOR0
     c.g = tex2D(S0, uv).g;
     c.b = tex2D(S0, uv - ca).b;
     c = gradeColor(c, uv);
-    c += sunRays(uv) * gSunColor * (gRayStrength * (0.22 + 0.78 * saturate(gSunI * 1.4)));
+    // sun shafts + the volumetric glow ball around the sun (both fade with the weather / clock)
+    float rayK = gRayStrength * (0.22 + 0.78 * saturate(gSunI * 1.4));
+    c += sunRays(uv) * gSunColor * rayK;
+    float2 sg = uv - gSunScreen;
+    float sd2 = dot(sg, sg);
+    c += gSunColor * (rayK * 0.7 * (exp(-sd2 * 30.0) * 1.2 + exp(-sd2 * 6.0) * 0.35));
     c *= gGain * gExposure * (1.0 + gFlash * 0.28);
     c *= saturate(1.0 - r2 * 1.25);
     float g = frac(sin(dot(uv * float2(913.0, 541.0) + gTime, float2(12.9898, 78.233))) * 43758.5453) - 0.5;
