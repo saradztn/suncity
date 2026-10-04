@@ -1,0 +1,199 @@
+// Created by: Arena.ai Agent Mode (AI) - NightCity MTA:SA resource
+// sky.fx - procedural sky dome (the camera-following sphere model "skydome", drawn at the far plane).
+//   * scattering-shaped sky: zenith / horizon gradient whose brightening follows the sun side (Mie forward scatter)
+//   * real sun disc with limb darkening + halo, moon with a soft glow, star field at night
+//   * two drifting cloud layers sampled from the tileable noise texture (gTexture0 = nc_sky_noise): coverage from the
+//     weather, lit toward the sun with a silver lining, dark bases, storm darkening, horizon fade into the haze band
+//   * lightning flash (gFlash) lights the whole dome and the clouds
+// The direction is the model-space position (the object sits on the camera and never rotates), the vertex shader pins
+// the dome to the far plane so every drawn pixel is behind the whole scene.  Shader model 3.
+// ---- Time / weather colours come from the env.lua timecycle (gSunDir, gSunColor, gZenith, gHorizon, ...): the shader
+// ---- shapes them physically; the engine cannot re-light the baked city geometry any other way.
+float4x4 gWorldViewProjection : WORLDVIEWPROJECTION;
+float3 gCameraPosition : CAMERAPOSITION;
+float gTime : TIME;
+
+// ---- environment uniform block (shared by every NightCity shader, pushed by client.lua)
+float3 gSunDir = float3(0.0, 0.0, 1.0);
+float3 gSunColor = float3(1.0, 1.0, 1.0);
+float gSunI = 0.0;
+float3 gMoonDir = float3(0.0, 0.0, 1.0);
+float3 gAmbient = float3(0.1, 0.11, 0.14);
+float gNightKeep = 1.0;
+float gNightGlow = 1.0;
+float gNight = 1.0;
+float3 gZenith = float3(0.02, 0.03, 0.08);
+float3 gHorizon = float3(0.16, 0.12, 0.2);
+float3 gFogColor = float3(0.12, 0.1, 0.16);
+float2 gFogRange = float2(200.0, 900.0);
+float gCloudCover = 0.8;
+float gCloudDark = 0.5;
+float2 gWind = float2(0.6, 0.2);
+float gFlash = 0.0;
+float gQuality = 2.0;
+float gDim = 1.0;
+float gWet = 1.0;
+float gPuddle = 1.0;
+float gExposure = 1.0;
+// ---- sky extras
+float gHaze = 0.5;
+float gMie = 0.5;
+
+texture gTexture0;                       // cloud noise (handed over by client.lua)
+
+sampler Sampler0 = sampler_state
+{
+    Texture = (gTexture0);
+    MinFilter = Linear;
+    MagFilter = Linear;
+    MipFilter = Linear;
+    AddressU = Wrap;
+    AddressV = Wrap;
+};
+
+struct VSInput
+{
+    float3 Position : POSITION0;
+    float2 TexCoord : TEXCOORD0;
+};
+
+struct VSOutput
+{
+    float4 Position : POSITION0;
+    float3 Dir : TEXCOORD0;
+};
+
+struct PSInput
+{
+    float3 Dir : TEXCOORD0;
+};
+
+VSOutput VertexShaderFunction(VSInput VS)
+{
+    VSOutput O;
+    O.Dir = VS.Position;                                   // unit sphere: the direction from the camera
+    float4 p = mul(float4(VS.Position * 2000.0, 1.0), gWorldViewProjection);
+    p.z = p.w * 0.99995;                                   // pin to the far plane: always behind the scene
+    O.Position = p;
+    return O;
+}
+
+float hash21(float2 p)
+{
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+// fbm from the tileable noise texture: R broad billows, G medium, B fine wisps
+float fbm3(float2 p)
+{
+    float f = tex2D(Sampler0, p * 0.0625).r * 0.55;
+    f += tex2D(Sampler0, p * 0.125 + 0.37).g * 0.28;
+    f += tex2D(Sampler0, p * 0.25 + 0.71).b * 0.17;
+    return f;
+}
+
+float fbm4(float2 p)
+{
+    float f = fbm3(p);
+    if (gQuality >= 2.5)
+    {
+        f += tex2D(Sampler0, p * 0.5 + 0.13).r * 0.10;
+    }
+    return f;
+}
+
+// one cloud layer: world-anchored plane at height h (metres above the camera), noise cell size cs
+float cloudLayer(float3 dir, float h, float cs, float cover, float seed)
+{
+    if (dir.z <= 0.015)
+    {
+        return 0.0;
+    }
+    float2 wp = gCameraPosition.xz + dir.xz * (h / max(dir.z, 0.03));
+    float2 p = (wp + gTime * gWind) / cs + seed;
+    float n = fbm4(p);
+    float lo = 0.62 - 0.42 * cover;
+    float hi = lo + 0.30;
+    float cov = smoothstep(lo, hi, n);
+    return cov * smoothstep(0.015, 0.16, dir.z);
+}
+
+float4 PixelShaderFunction(PSInput PS) : COLOR0
+{
+    float3 dir = normalize(PS.Dir);
+    float mu = dot(dir, gSunDir);
+    float mu2 = saturate(mu * 0.5 + 0.5);
+
+    // ---- scattering-shaped gradient: bright toward the sun, deeper opposite, haze band at the horizon
+    float up = saturate(dir.z * 0.5 + 0.5);
+    float3 col = lerp(gHorizon, gZenith, pow(up, 0.55));
+    col += gSunColor * (gSunI * 0.22 + 0.04) * pow(mu2, 3.0) * gMie * (0.35 + 0.65 * up);
+    float horizonBand = pow(1.0 - saturate(abs(dir.z)), 9.0);
+    col = lerp(col, gFogColor, horizonBand * gHaze);
+
+    // ---- sun disc + halo
+    float sunAng = acos(clamp(mu, -1.0, 1.0));
+    float disc = smoothstep(0.021, 0.014, sunAng);
+    float limb = pow(saturate(1.0 - sunAng / 0.021), 0.35);
+    col += gSunColor * gSunI * disc * limb * 2.4;
+    col += gSunColor * gSunI * pow(saturate(mu), 42.0) * 0.55 * gMie;
+    col += gSunColor * gSunI * pow(saturate(mu), 7.0) * 0.14 * gMie;
+
+    // ---- moon + stars (night)
+    float night = gNight * (1.0 - saturate(gSunI * 1.6));
+    if (night > 0.01)
+    {
+        float mmu = dot(dir, gMoonDir);
+        float mAng = acos(clamp(mmu, -1.0, 1.0));
+        float mdisc = smoothstep(0.017, 0.012, mAng);
+        float shade = 0.55 + 0.45 * pow(saturate(mmu * 0.5 + 0.5), 0.7);
+        col += float3(0.86, 0.9, 1.0) * mdisc * shade * 1.15 * night;
+        col += float3(0.5, 0.6, 0.82) * pow(saturate(mmu), 20.0) * 0.10 * night;
+        float2 su = float2(atan(dir.y, dir.x) * 3.8197, asin(clamp(dir.z, -1.0, 1.0)) * 3.8197);
+        float2 g = floor(su * 22.0);
+        float h = hash21(g);
+        float star = smoothstep(0.994, 1.0, h);
+        float tw = 0.55 + 0.45 * sin(gTime * (1.2 + h * 2.4) + h * 31.0);
+        col += float3(0.85, 0.9, 1.0) * star * tw * night * smoothstep(0.02, 0.25, dir.z);
+    }
+
+    // ---- clouds: two layers, lit toward the sun, silver lining, dark bases
+    float cover = gCloudCover;
+    float c1 = cloudLayer(dir, 520.0, 430.0, cover, 0.0);
+    float c2 = 0.0;
+    if (gQuality >= 1.5)
+    {
+        c2 = cloudLayer(dir, 330.0, 190.0, saturate(cover * 0.85), 3.7) * 0.8;
+    }
+    float cov = saturate(c1 + c2 * (1.0 - c1 * 0.55));
+    float3 cl = lerp(gZenith * 0.55 + gHorizon * 0.45, float3(0.06, 0.065, 0.08), saturate(cov * 1.25) * 0.55);
+    cl *= lerp(gCloudDark, 1.18, pow(mu2, 2.2));
+    cl += gSunColor * (gSunI * 0.75 + 0.06) * pow(saturate(mu), 10.0) * (1.0 - saturate(cov * 1.6)) * cov * 0.8;
+    cl += gSunColor * (gSunI * 0.2) * pow(saturate(mu), 3.0) * cov * 0.35;
+    float cf = smoothstep(0.0, 0.35, cov);
+    col = lerp(col, cl, cf * smoothstep(0.01, 0.12, dir.z));
+
+    // ---- below the horizon: the haze the distant geometry fades into
+    col = lerp(col, gFogColor, smoothstep(0.0, -0.16, dir.z));
+
+    // ---- lightning lights the clouds and the sky
+    col += gFlash * (0.30 + 0.70 * cov) * float3(0.82, 0.86, 1.0) * (0.45 + 0.55 * up);
+
+    return float4(saturate(col * gDim), 1.0);
+}
+
+technique tec0
+{
+    pass P0
+    {
+        VertexShader = compile vs_3_0 VertexShaderFunction();
+        PixelShader = compile ps_3_0 PixelShaderFunction();
+    }
+}
+
+technique fallback
+{
+    pass P0
+    {
+    }
+}
