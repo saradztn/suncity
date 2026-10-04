@@ -699,8 +699,8 @@ end
 
 local function fxFrame()
     if not FX.src or not isElement(FX.src) then return end
-    dxUpdateScreenSource(FX.src)
-    if FX.post and isElement(FX.post) then
+    dxUpdateScreenSource(FX.src, true)      -- capture NOW, before the grade pass: without 'true' the source
+    if FX.post and isElement(FX.post) then  -- holds last frame's output and every frame re-grades it (rainbow runaway)
         dxDrawImage(0, 0, FX.w, FX.h, FX.post)
     end
 end
@@ -864,8 +864,8 @@ local function showCity(zoff, ax, ay, az)
     if S.shown then clearCity() end
     S.token = S.token + 1
     local token = S.token
-    S.zoff = zoff or 0
     if ax and ay and az then S.anchor = { x = ax, y = ay, z = az } end
+    S.zoff = (zoff or 0) + (S.zBias or 0)                          -- /setz trim survives hide / show
     local near = cityDist() < 600
     if near then setElementFrozen(localPlayer, true) S.hold = true end        -- hold the player in the air until the ground exists
     if not S.loaded then say("loading " .. #NC_MODELS .. " models and " .. #NC_OBJECTS .. " objects - this takes a few seconds ...") end
@@ -924,7 +924,12 @@ addEventHandler("nc:hide", resourceRoot, function()
 end)
 
 -- /nczoff trims the height of the whole city
-addEventHandler("nc:zoff", resourceRoot, function(dz)
+-- city deck height: the city ground sits at (S.anchor or CFG.ANCHOR).z + S.zoff; /setz sets it, /ncz trims it
+local function cityZ()
+    return (S.anchor or CFG.ANCHOR).z + S.zoff
+end
+
+local function shiftCity(dz)
     S.zoff = S.zoff + dz
     if not S.shown then return end
     for k, e in pairs(S.objs) do
@@ -938,6 +943,29 @@ addEventHandler("nc:zoff", resourceRoot, function(dz)
     end
     for _, w in pairs(S.water) do
         if w and isElement(w.e) then pcall(setWaterLevel, w.e, (S.anchor or CFG.ANCHOR).z + S.zoff + w.z) end
+    end
+end
+
+addEventHandler("nc:zoff", resourceRoot, function(dz) shiftCity(dz) end)
+
+addCommandHandler("setz", function(_, arg)
+    local v = tonumber(arg)
+    if not v then
+        say("usage: /setz <height | +d | -d>   (city deck height above the map, now " .. string.format("%.0f", cityZ()) .. ")")
+        return
+    end
+    local dz
+    if arg:sub(1, 1) == "+" or arg:sub(1, 1) == "-" then
+        dz = v                                                     -- relative: +100 lifts, -100 drops
+    else
+        dz = v - cityZ()                                           -- absolute world Z of the city deck
+    end
+    S.zBias = (S.zBias or 0) + dz                                  -- keeps the trim across /nchide //ncshow
+    shiftCity(dz)
+    if S.shown then
+        say("city height " .. string.format("%.0f", cityZ()))
+    else
+        say("city height " .. string.format("%.0f", cityZ()) .. " (applies at the next /ncshow)")
     end
 end)
 

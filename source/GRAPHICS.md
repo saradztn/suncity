@@ -177,6 +177,11 @@ warm highlights), dual polar vignette, 5-tap chromatic aberration ramping to the
 time-hashed film grain, and **god rays**: radial blur of the bright frame toward the sun's screen
 position with a horizontal gate (so the towers break the rays into shafts).
 
+The grade samples `gScreen` = a `dxCreateScreenSource` of the frame.  **The capture must be
+`dxUpdateScreenSource(FX.src, true)`** — with the default `false` MTA delivers the *previous* frame's
+end-of-frame image, which already includes the grade pass: every frame re-grades its own output and
+the screen explodes into saturated rainbow mush (classic fullscreen-effect feedback).
+
 ## 10. Commands
 
 | command | effect |
@@ -193,6 +198,7 @@ position with a horizontal gate (so the towers break the rays into shafts).
 | `/ncenv` | environment status line |
 | `/ncinfo` | scene + environment status |
 | `/ncview <point>`, `/nctour`, `/ncfree` | navigation (see README section) |
+| `/setz <height \| +d \| -d>` | city deck height above the map (default 900; absolute, or relative with +/-; survives /nchide) |
 
 Server: `/ncshow`, `/nchide`, `/ncz <dz>`, `/ncempty`.
 
