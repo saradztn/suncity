@@ -109,13 +109,16 @@ float cloudLayer(float3 dir, float h, float cs, float cover, float seed)
     {
         return 0.0;
     }
-    float2 wp = gCameraPosition.xz + dir.xz * (h / max(dir.z, 0.03));
+    // h / dir.z explodes at grazing angles and smears the noise domain into long radial STREAKS
+    // across the sky (the old "lines in the sky").  The +0.28 keeps the projection nearly
+    // isotropic (bounded ~3.6x stretch), and the most-stretched horizon band fades into the haze.
+    float2 wp = gCameraPosition.xz + dir.xz * (h / (dir.z + 0.28));
     float2 p = (wp + gTime * gWind) / cs + seed;
     float n = fbm4(p);
     float lo = 0.62 - 0.42 * cover;
     float hi = lo + 0.30;
     float cov = smoothstep(lo, hi, n);
-    return cov * smoothstep(0.015, 0.16, dir.z);
+    return cov * smoothstep(0.03, 0.26, dir.z);
 }
 
 float4 PixelShaderFunction(PSInput PS) : COLOR0
