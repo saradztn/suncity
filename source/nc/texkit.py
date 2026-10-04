@@ -7,14 +7,107 @@
 # San Andreas has no PBR pipeline, so only albedo + emission end up in the game (DXT1 diffuse); roughness / metallic /
 # height are authoring maps that shape the albedo (cavity AO, wet polish, ...).
 # -----------------------------------------------------------------------------
+import os
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage as ndi
 from lib.noise import fnoise, bnoise, worley, smooth, scratches
 
-FONT_B = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-FONT_R = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-FONT_M = '/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf'
+# ---------------------------------------------------------------------------------------
+# fonts: resolved per platform (Windows / macOS / Linux) - the build must never depend on
+# one absolute path.  FONT_B / FONT_R / FONT_M are kind keys for load_font(); every text
+# drawing call goes through load_font(), which falls back to the PIL default and never raises.
+# ---------------------------------------------------------------------------------------
+FONT_B = 'b'   # bold sans   (headings, brands)
+FONT_R = 'r'   # regular     (tag lines, small print)
+FONT_M = 'm'   # bold mono   (badges like "OPEN" / "24H")
+
+_FONT_FILES = {
+    'b': ['DejaVuSans-Bold.ttf', 'DejaVuSans-Bold.otf', 'LiberationSans-Bold.ttf',
+          'arialbd.ttf', 'Arial Bold.ttf', 'Arial_Bold.ttf', 'segoeuib.ttf', 'verdanab.ttf',
+          'calibrib.ttf', 'tahomabd.ttf', 'NotoSans-Bold.ttf', 'FreeSansBold.ttf'],
+    'r': ['DejaVuSans.ttf', 'DejaVuSans.otf', 'LiberationSans-Regular.ttf',
+          'arial.ttf', 'Arial.ttf', 'segoeui.ttf', 'verdana.ttf', 'calibri.ttf', 'tahoma.ttf',
+          'NotoSans-Regular.ttf', 'FreeSans.ttf'],
+    'm': ['DejaVuSansMono-Bold.ttf', 'DejaVuSansMono.ttf', 'LiberationMono-Bold.ttf',
+          'consolab.ttf', 'courbd.ttf', 'consola.ttf', 'Menlo.ttc', 'monaco.ttf'],
+}
+
+
+def _font_dirs():
+    dirs = []
+    windir = os.environ.get('WINDIR') or os.environ.get('SystemRoot')
+    if windir:
+        dirs.append(os.path.join(windir, 'Fonts'))
+    local = os.environ.get('LOCALAPPDATA')
+    if local:
+        dirs.append(os.path.join(local, 'Microsoft', 'Windows', 'Fonts'))
+    dirs += ['/usr/share/fonts', '/usr/share/fonts/truetype', '/usr/share/fonts/truetype/dejavu',
+             '/usr/share/fonts/truetype/liberation', '/usr/share/fonts/truetype/noto',
+             '/usr/share/fonts/TTF', '/usr/local/share/fonts',
+             '/Library/Fonts', '/System/Library/Fonts', '/Library/Fonts/Supplemental',
+             os.path.expanduser('~/Library/Fonts')]
+    out, seen = [], set()
+    for d in dirs:
+        d = os.path.normpath(d)
+        if d not in seen and os.path.isdir(d):
+            seen.add(d)
+            out.append(d)
+    return out
+
+
+_FONT_RESOLVED = {}   # kind -> path or None (only resolved once)
+
+
+def _find_font_path(kind):
+    if kind in _FONT_RESOLVED:
+        return _FONT_RESOLVED[kind]
+    names = [n.lower() for n in _FONT_FILES.get(kind, _FONT_FILES['b'])]
+    dirs = _font_dirs()
+    found = None
+    for name in names:                                    # exact file names first
+        for d in dirs:
+            p = os.path.join(d, name)
+            if os.path.isfile(p):
+                found = p
+                break
+        if found:
+            break
+    if not found:                                         # then a shallow scan for the same names
+        for d in dirs:
+            for root, subdirs, files in os.walk(d):
+                subdirs[:] = [s for s in subdirs if not s.startswith('.')]
+                if root.count(os.sep) - d.count(os.sep) > 2:
+                    subdirs.clear()
+                    continue
+                low = {f.lower(): f for f in files}
+                for name in names:
+                    if name in low:
+                        found = os.path.join(root, low[name])
+                        break
+                if found:
+                    break
+            if found:
+                break
+    if found:
+        print('   font %-7s %s' % (kind, found))
+    _FONT_RESOLVED[kind] = found
+    return found
+
+
+def load_font(kind, size):
+    """PIL font of the given kind ('b' / 'r' / 'm') at pixel size.  Never raises."""
+    size = max(6, int(size))
+    p = _find_font_path(kind)
+    if p:
+        try:
+            return ImageFont.truetype(p, size)
+        except Exception:
+            pass
+    try:
+        return ImageFont.load_default(size)      # Pillow >= 10.1: sized default face
+    except TypeError:
+        return ImageFont.load_default()
 
 
 class PBR:
@@ -108,6 +201,6 @@ def lin2srgb(c):
 def draw_text_img(w, h, text, size, fill=(255, 255, 255), font=FONT_B, bg=(0, 0, 0, 0), anchor='mm', xy=None, stroke=0):
     im = Image.new('RGBA', (w, h), bg)
     d = ImageDraw.Draw(im)
-    f = ImageFont.truetype(font, size)
+    f = load_font(font, size)
     d.text(xy or (w / 2, h / 2), text, font=f, fill=fill, anchor=anchor, stroke_width=stroke, stroke_fill=fill)
     return im

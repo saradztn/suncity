@@ -7,7 +7,7 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from lib.noise import smooth
-from .texkit import PBR, coords, lerp, rgb, blur, fbm, grain, rect_aa, FONT_B, FONT_R, FONT_M
+from .texkit import PBR, coords, lerp, rgb, blur, fbm, grain, rect_aa, FONT_B, FONT_R, FONT_M, load_font
 from .texgen import REG, reg
 
 WARM = rgb(1.00, 0.70, 0.40)
@@ -242,10 +242,10 @@ def _storefront(h, w, seed, kind):
         d = ImageDraw.Draw(im)
         txt = WORDS[rng.integers(len(WORDS))]
         fs = int(im.size[1] * 0.62)
-        f = ImageFont.truetype(FONT_B, fs)
+        f = load_font(FONT_B, fs)
         while d.textlength(txt, font=f) > im.size[0] * 0.90 and fs > 8:
             fs -= 2
-            f = ImageFont.truetype(FONT_B, fs)
+            f = load_font(FONT_B, fs)
         d.text((im.size[0] / 2, im.size[1] / 2), txt, font=f, fill=255, anchor='mm')
         tm = np.zeros((h, w), np.float32)
         y0p = int(h * 0.055)
@@ -332,13 +332,13 @@ def _neon_cell(cw, ch, rng, vertical):
                 _glyph(d, (cw * S * 0.22, pad + k * s + s * 0.1, cw * S * 0.78, pad + (k + 1) * s - s * 0.1), rng, col, wd)
         else:                            # stacked latin letters
             txt = WORDS[rng.integers(len(WORDS))][:5]
-            f = ImageFont.truetype(FONT_B, int(min(cw * S * 0.6, (ch * S - 2 * pad) / len(txt) * 0.9)))
+            f = load_font(FONT_B, int(min(cw * S * 0.6, (ch * S - 2 * pad) / len(txt) * 0.9)))
             for k, chh in enumerate(txt):
                 d.text((cw * S / 2, pad + (k + 0.5) * (ch * S - 2 * pad) / len(txt)), chh, font=f, fill=255, anchor='mm')
     else:
         if style == 0:
             txt = WORDS[rng.integers(len(WORDS))]
-            f = ImageFont.truetype(FONT_B, int(ch * S * 0.52))
+            f = load_font(FONT_B, int(ch * S * 0.52))
             d.text((cw * S / 2, ch * S / 2), txt, font=f, fill=255, anchor='mm')
         elif style == 1:
             n = rng.integers(2, 4)
@@ -347,22 +347,22 @@ def _neon_cell(cw, ch, rng, vertical):
                 _glyph(d, (pad + k * s + s * 0.1, ch * S * 0.2, pad + (k + 1) * s - s * 0.1, ch * S * 0.8), rng, col, wd)
         elif style == 2:
             txt = WORDS[rng.integers(len(WORDS))]
-            f = ImageFont.truetype(FONT_B, int(ch * S * 0.34))
+            f = load_font(FONT_B, int(ch * S * 0.34))
             d.text((cw * S * 0.40, ch * S / 2), txt, font=f, fill=255, anchor='mm')
             _glyph(d, (cw * S * 0.74, ch * S * 0.2, cw * S * 0.92, ch * S * 0.8), rng, col, wd)
         elif style == 3:
             ar = _arabic(ARABIC[rng.integers(len(ARABIC))])
             if ar:
-                f = ImageFont.truetype(FONT_B, int(ch * S * 0.46))
+                f = load_font(FONT_B, int(ch * S * 0.46))
                 d.text((cw * S / 2, ch * S / 2), ar, font=f, fill=255, anchor='mm')
             else:
                 txt = WORDS[rng.integers(len(WORDS))]
-                d.text((cw * S / 2, ch * S / 2), txt, font=ImageFont.truetype(FONT_B, int(ch * S * 0.5)), fill=255, anchor='mm')
+                d.text((cw * S / 2, ch * S / 2), txt, font=load_font(FONT_B, int(ch * S * 0.5)), fill=255, anchor='mm')
         else:
             txt = WORDS[rng.integers(len(WORDS))]
-            d.text((cw * S / 2, ch * S * 0.34), txt, font=ImageFont.truetype(FONT_B, int(ch * S * 0.36)), fill=255, anchor='mm')
+            d.text((cw * S / 2, ch * S * 0.34), txt, font=load_font(FONT_B, int(ch * S * 0.36)), fill=255, anchor='mm')
             d.line([(pad, ch * S * 0.66), (cw * S - pad, ch * S * 0.66)], fill=255, width=wd)
-            d.text((cw * S / 2, ch * S * 0.82), 'OPEN' if rng.random() < 0.5 else '24H', font=ImageFont.truetype(FONT_M, int(ch * S * 0.2)), fill=255, anchor='mm')
+            d.text((cw * S / 2, ch * S * 0.82), 'OPEN' if rng.random() < 0.5 else '24H', font=load_font(FONT_M, int(ch * S * 0.2)), fill=255, anchor='mm')
     m1 = np.asarray(mask.resize((cw, ch), Image.LANCZOS), np.float32) / 255.0
     m2 = np.asarray(frame.resize((cw, ch), Image.LANCZOS), np.float32) / 255.0 * (1.0 if use_frame else 0.0)
     return m1, m2, col, col2
@@ -458,17 +458,17 @@ def _ad(cw, ch, rng):
     tx = cw * (0.70 if side else 0.30)
     brand = BRANDS[rng.integers(len(BRANDS))]
     fs = int(ch * 0.26)
-    bf = ImageFont.truetype(FONT_B, fs)
+    bf = load_font(FONT_B, fs)
     while d.textlength(brand, font=bf) > cw * 0.40 and fs > 8:
         fs -= 2
-        bf = ImageFont.truetype(FONT_B, fs)
+        bf = load_font(FONT_B, fs)
     d.text((tx, ch * 0.40), brand, font=bf, fill=(255, 255, 255), anchor='mm')
     tag = TAGS[rng.integers(len(TAGS))]
     tfs = int(ch * 0.075)
-    tf = ImageFont.truetype(FONT_R, tfs)
+    tf = load_font(FONT_R, tfs)
     while d.textlength(tag, font=tf) > cw * 0.40 and tfs > 6:
         tfs -= 1
-        tf = ImageFont.truetype(FONT_R, tfs)
+        tf = load_font(FONT_R, tfs)
     d.text((tx, ch * 0.64), tag, font=tf, fill=(235, 240, 255), anchor='mm')
     d.rectangle([tx - cw * 0.16, ch * 0.75, tx + cw * 0.16, ch * 0.77], fill=(255, 255, 255))
     out = np.asarray(im, np.float32) / 255.0

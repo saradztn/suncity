@@ -8,10 +8,6 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-FONT_B = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-FONT_R = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-FONT_M = '/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf'
-
 
 class Tex:
     def __init__(self, albedo, height, rough, metal, ao):

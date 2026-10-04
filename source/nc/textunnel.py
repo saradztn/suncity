@@ -8,7 +8,7 @@ from scipy import ndimage as ndi
 from PIL import Image, ImageDraw, ImageFont
 from lib.noise import smooth
 from .texgen import reg
-from .texkit import PBR, coords, lerp, rgb, fbm, grain, FONT_B, FONT_R
+from .texkit import PBR, coords, lerp, rgb, fbm, grain, FONT_B, FONT_R, load_font
 
 PANEL_W = 4.0       # metres of tunnel wall covered by one texture repeat
 PANEL_H = 4.8       # metres from the road to the ceiling (the texture is NOT repeated vertically)
@@ -75,12 +75,12 @@ def tunnel_sign(h, w, seed):
     d.polygon([(46, 20), (78, 20), (78, 60), (100, 60), (62, 106), (24, 60), (46, 60)], fill=(240, 246, 240))
     size = 60
     while size > 20:
-        f1 = ImageFont.truetype(FONT_B, size)
+        f1 = load_font(FONT_B, size)
         if d.textlength('RIVER TUNNEL', font=f1) <= w - 150:
             break
         size -= 2
     d.text((128 + (w - 150) / 2, h * 0.38), 'RIVER TUNNEL', font=f1, fill=(244, 248, 244), anchor='mm')
-    f2 = ImageFont.truetype(FONT_R, 21)
+    f2 = load_font(FONT_R, 21)
     d.text((128 + (w - 150) / 2, h * 0.79), 'LOW BEAM  -  540 m  -  4.5 m', font=f2, fill=(220, 236, 224), anchor='mm')
     a = np.asarray(im, np.float32) / 255.0
     n = fbm(h, w, seed + 7, 2.0)
