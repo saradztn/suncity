@@ -149,7 +149,7 @@ float4 PixelShaderFunction(PSInput PS) : COLOR0
         float shade = 0.55 + 0.45 * pow(saturate(mmu * 0.5 + 0.5), 0.7);
         col += float3(0.86, 0.9, 1.0) * mdisc * shade * 1.15 * night;
         col += float3(0.5, 0.6, 0.82) * pow(saturate(mmu), 20.0) * 0.10 * night;
-        float2 su = float2(atan(dir.y, dir.x) * 3.8197, asin(clamp(dir.z, -1.0, 1.0)) * 3.8197);
+        float2 su = float2(atan2(dir.y, dir.x) * 3.8197, asin(clamp(dir.z, -1.0, 1.0)) * 3.8197);
         float2 g = floor(su * 22.0);
         float h = hash21(g);
         float star = smoothstep(0.994, 1.0, h);

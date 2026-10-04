@@ -137,6 +137,21 @@ for fx in sorted(f for f in os.listdir(RES) if f.endswith('.fx')):
     check(not unknown, '%s: every identifier is declared, an intrinsic or a keyword %s' % (fx, unknown[:6]))
     for s in re.findall(r'tex2D\s*\(\s*(\w+)', code):
         check(re.search(r'sampler\s+%s\s*=\s*sampler_state' % s, code) is not None, '%s: tex2D uses declared sampler %s' % (fx, s))
+    # fxc rejects the two-argument form of atan in older profiles (it is atan2 there) - this broke sky.fx in-game once
+    for m in re.finditer(r'\batan\s*\(', code):
+        close = code.find(')', m.end())
+        seg = code[m.end():close if close > 0 else m.end() + 40]
+        check(',' not in seg, '%s: atan() takes one argument - use atan2() for the two-argument form' % fx)
+    # ps_2_0 allows only 64 arithmetic slots and MTA compiles EVERY technique when the effect loads:
+    # a fat ps_2_0 function kills the whole shader even on shader model 3 cards
+    for fn in sorted(set(re.findall(r'compile\s+ps_2_0\s+(\w+)\s*\(', code))):
+        i = code.find('float4 %s(' % fn)
+        body = code[i:code.find('\n}', i)] if i >= 0 else ''
+        heavy = len(re.findall(r'\b(?:pow|sin|cos|tan|asin|acos|atan2?|exp2?|log2?|sqrt|rsq|rcp|normalize|reflect|smoothstep)\s*\(', body))
+        if heavy > 12:
+            warn('%s: %s (ps_2_0 target) has %d transcendental/geometry calls - keep it under the 64-slot ps_2_0 budget' % (fx, fn, heavy))
+        else:
+            ok('%s: %s is lean enough for the ps_2_0 target (%d transcendental calls)' % (fx, fn, heavy))
     for sem in re.findall(r':\s*([A-Z]+\d?)\s*[;,)]', code):
         check(sem in SEMANTICS or sem.startswith('COLOR') or sem.startswith('TEXCOORD'), '%s: semantic %s is known' % (fx, sem))
     # shader inputs the script sets must exist

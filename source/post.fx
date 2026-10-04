@@ -64,6 +64,19 @@ float3 gradeColor(float3 c, float2 uv)
     return c;
 }
 
+// lean grade for the ps_2_0 technique: the same look (bloom, saturation, split tone) in about half the
+// arithmetic slots - ps_2_0 allows only 64 and EVERY technique in the file is compiled when MTA loads it.
+float3 gradeColorLite(float3 c, float2 uv)
+{
+    float2 w = gPix * 8.0;
+    float3 b = (tex2D(S0, uv + w).rgb + tex2D(S0, uv - w).rgb) * 0.5;
+    c += b * b * 0.85;
+    float l = dot(c, float3(0.299, 0.587, 0.114));
+    c = lerp(float3(l, l, l), c, 1.18);
+    c *= lerp(float3(0.86, 1.0, 1.12), float3(1.10, 0.98, 1.04), saturate(l * 1.6));
+    return c;
+}
+
 float3 sunRays(float2 uv)
 {
     float2 d = gSunScreen - uv;
@@ -106,15 +119,15 @@ float4 PixelShaderLite(float2 uv : TEXCOORD0) : COLOR0
 {
     float2 d0 = uv - 0.5;
     float r2 = dot(d0, d0);
-    float2 ca = d0 * r2 * 0.014;
+    float2 ca = d0 * (r2 * 0.014);
     float3 c;
     c.r = tex2D(S0, uv + ca).r;
     c.g = tex2D(S0, uv).g;
     c.b = tex2D(S0, uv - ca).b;
-    c = gradeColor(c, uv);
+    c = gradeColorLite(c, uv);
     c *= gGain * gExposure * (1.0 + gFlash * 0.28);
     c *= saturate(1.0 - r2 * 1.25);
-    float g = frac(sin(dot(uv * float2(913.0, 541.0) + gTime, float2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    float g = frac(sin(dot(uv, float2(12.9898, 78.233)) + gTime * 5.0) * 43758.5453) - 0.5;
     if (gQuality >= 1.5)
     {
         c += g * 0.022;

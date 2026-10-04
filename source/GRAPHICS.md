@@ -196,7 +196,18 @@ position with a horizontal gate (so the towers break the rays into shafts).
 
 Server: `/ncshow`, `/nchide`, `/ncz <dz>`, `/ncempty`.
 
-## 11. Failure behaviour
+## 11. Shader targets & failure behaviour
+
+Each `.fx` ships `technique tec0` (`vs_3_0`/`ps_3_0`) plus an empty `technique fallback`.  `post.fx`
+also has `technique tec1` (`ps_2_0`) — a lean grade for shader model 2 cards.  **MTA compiles every
+technique in the file when the effect is created**, so the `ps_2_0` path must always fit the 64
+arithmetic-slot budget of `ps_2_0` or the whole shader fails on every machine (that is exactly what
+`error X5608` means).  Two rules follow — both enforced by `validate.py`:
+
+* never use the two-argument `atan(y, x)` — old fxc rejects it; use `atan2(y, x)`;
+* anything compiled for `ps_2_0` stays lean (the validator warns above ~12 transcendental calls).
+
+Failure behaviour at runtime:
 
 * shaders compile-fail or the shader model is too old (`fallback` technique) → the city runs
   without them and `/ncfx` says so; a partial failure keeps the reduced set and reports it;
