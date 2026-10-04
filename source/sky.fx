@@ -2,8 +2,9 @@
 // sky.fx - procedural sky dome (the camera-following sphere model "skydome", drawn at the far plane).
 //   * scattering-shaped sky: zenith / horizon gradient whose brightening follows the sun side (Mie forward scatter)
 //   * real sun disc with limb darkening + halo, moon with a soft glow, star field at night
-//   * two drifting cloud layers sampled from the tileable noise texture (gTexture0 = nc_sky_noise): coverage from the
-//     weather, lit toward the sun with a silver lining, dark bases, storm darkening, horizon fade into the haze band
+//   * two drifting cloud layers from PROCEDURAL value noise (computed in the shader - no texture to load,
+//     bind or magnify): coverage from the weather, lit toward the sun with a silver lining, dark bases, storm
+//     darkening, horizon fade into the haze band
 //   * lightning flash (gFlash) lights the whole dome and the clouds
 // The direction is the model-space position (the object sits on the camera and never rotates), the vertex shader pins
 // the dome to the far plane so every drawn pixel is behind the whole scene.  Shader model 3.
@@ -39,18 +40,6 @@ float gExposure = 1.0;
 float gHaze = 0.5;
 float gMie = 0.5;
 
-texture gTexture0;                       // cloud noise (handed over by client.lua)
-
-sampler Sampler0 = sampler_state
-{
-    Texture = (gTexture0);
-    MinFilter = Linear;
-    MagFilter = Linear;
-    MipFilter = Linear;
-    AddressU = Wrap;
-    AddressV = Wrap;
-};
-
 struct VSInput
 {
     float3 Position : POSITION0;
@@ -83,12 +72,27 @@ float hash21(float2 p)
     return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
 }
 
-// fbm from the tileable noise texture: R broad billows, G medium, B fine wisps
+// smooth procedural value noise - the clouds are COMPUTED here, never sampled from a texture
+// (the old rainbow noise texture showed up raw whenever the binding broke and as giant colour
+// blobs whenever the sampling scale collapsed: a definitive fix removes the texture entirely)
+float vnoise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+// fbm: broad billows, medium structure, fine wisps
 float fbm3(float2 p)
 {
-    float f = tex2D(Sampler0, p * 0.0625).r * 0.55;
-    f += tex2D(Sampler0, p * 0.125 + 0.37).g * 0.28;
-    f += tex2D(Sampler0, p * 0.25 + 0.71).b * 0.17;
+    float f = vnoise(p * 0.35) * 0.55;
+    f += vnoise(p * 0.75 + 11.7) * 0.28;
+    f += vnoise(p * 1.6 + 23.1) * 0.17;
     return f;
 }
 
@@ -97,7 +101,7 @@ float fbm4(float2 p)
     float f = fbm3(p);
     if (gQuality >= 2.5)
     {
-        f += tex2D(Sampler0, p * 0.5 + 0.13).r * 0.10;
+        f += vnoise(p * 3.3 + 5.9) * 0.10;
     }
     return f;
 }

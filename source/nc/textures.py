@@ -36,7 +36,7 @@ NEON = {'nc_ads', 'nc_led', 'nc_neon_h', 'nc_neon_v', 'nc_tunnel_sign', 'nc_shop
 
 
 def surface_group(name):
-    if name == 'nc_sky_noise':
+    if name == 'nc_sky_dome':
         return 'sky'
     if name.startswith('nc_glass'):
         return 'glass'

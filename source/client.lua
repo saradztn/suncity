@@ -467,7 +467,6 @@ end
 local function startSprites()
     S.tex.glow = dxCreateTexture("files/fx/glow.png", "argb", true, "clamp")
     S.tex.steam = dxCreateTexture("files/fx/steam.png", "argb", true, "clamp")
-    S.tex.noise = dxCreateTexture("files/fx/sky_noise.png", "argb", true, "clamp")   -- sky.fx cloud noise
     if not S.tex.glow then dbg("glow.png could not be loaded: no light glow") return end
     buildSpriteGrid()
     addEventHandler("onClientRender", root, drawSprites)
@@ -654,8 +653,7 @@ local function skyOn()
     local sh, tech = dxCreateShader("sky.fx")
     if not sh then dbg("sky.fx: " .. tostring(tech)) return false end
     if tech == "fallback" then dbg("sky.fx: shader model 3 is not available, sky dome disabled") destroyElement(sh) return false end
-    if S.tex and S.tex.noise then dxSetShaderValue(sh, "gTexture0", S.tex.noise) end   -- cloud noise
-    if not engineApplyShaderToWorldTexture(sh, "nc_sky_noise") then                    -- the dome model texture
+    if not engineApplyShaderToWorldTexture(sh, "nc_sky_dome") then                    -- the dome model texture (flat hook; the sky is 100% shader)
         dbg("sky.fx: could not take over the sky dome texture")
         destroyElement(sh)
         return false

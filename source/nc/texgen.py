@@ -426,12 +426,10 @@ def tank(h, w, seed):
     return PBR(a * 0.55, r, m * 0.2, hg - 0.3 * wl)
 
 
-@reg('nc_sky_noise', 256, 256)
-def sky_noise(h, w, seed):
-    """tileable value-noise field for the sky dome shader (sky.fx): the three channels are independent
-    periodic fbm fields at different spectral slopes; the shader samples them at several scales to build
-    the cloud layers (R broad billows, G medium detail, B fine wisps)."""
-    r = np.clip(0.5 + 0.20 * fbm(h, w, seed + 1, 2.2), 0, 1)
-    g = np.clip(0.5 + 0.22 * fbm(h, w, seed + 2, 1.6), 0, 1)
-    b = np.clip(0.5 + 0.24 * fbm(h, w, seed + 3, 1.1), 0, 1)
-    return PBR(np.stack([r, g, b], -1), 1.0, 0.0, 0.0)
+@reg('nc_sky_dome', 8, 8)
+def sky_dome(h, w, seed):
+    """flat hook texture for the sky dome model (skydome.py).  The dome colour is 100% shader:
+    sky.fx computes its clouds procedurally, so the texture only exists to give
+    engineApplyShaderToWorldTexture('nc_sky_dome') a name to match - no noise is stored anywhere."""
+    a = np.zeros((h, w, 3), np.float32) + np.array([0.02, 0.03, 0.08], np.float32)
+    return PBR(a, 1.0, 0.0, 0.0)

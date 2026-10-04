@@ -139,16 +139,21 @@ The value is also pushed as `gQuality` so the shaders themselves can drop octave
 
 ## 7. The sky dome
 
-`nc_skydome` is an inverted icosphere (radius 130) with one `nc_sky_noise` texture.  It is
+`nc_skydome` is an inverted icosphere (radius 130) with one flat `nc_sky_dome` hook texture.  It is
 **collisionless**, always in dimension 0, and `envFrame` repositions it on the camera every frame —
 the sky is literally painted around the player 900 m above the map.  All dome geometry normals are
-inward (verified numerically on the generated mesh) so `sky.fx` can tell sky from nothing.
+inward (verified numerically on the generated mesh) so `sky.fx` can tell sky from nothing.  The hook
+texture is 8×8 flat colour: its only job is to give `engineApplyShaderToWorldTexture` a name to
+match.  The clouds are **procedural value noise computed inside `sky.fx`** — there is no noise
+texture to load, bind or magnify (the old `nc_sky_noise` sheet showed up raw as rainbow mush when
+the binding broke and as giant colour blobs when the sampling scale collapsed; it is gone).
 
 Sky pass structure (`sky.fx`):
 
 1. **base gradient** — horizon colour (weather-dimmed) + boosted zenith, with lightning flash lift;
-2. **clouds** — two scrolling octaves of the RGB noise sheet (R broad billows, G mid detail), shaped
-   by `gCloudCover`, silver-lined toward `gSunDir`, dissolving into `gHaze` at the horizon;
+2. **clouds** — two drifting layers of procedural fbm (broad billows / mid detail / fine wisps), shaped
+   by `gCloudCover`, silver-lined toward `gSunDir`, dissolving into `gHaze` at the horizon; the plane
+   projection is softened (`h / (dir.z + 0.28)`) so grazing angles never smear the noise into streaks;
 3. **sun** — analytic disc with limb darkening ×3 bloom, only above the horizon;
 4. **stars** — hash-grid sparkle ×`gNight.z`, hidden by clouds;
 5. **city glow** — `gNight.x` band above the horizon (light pollution / neon dome) shifted toward

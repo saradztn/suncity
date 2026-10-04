@@ -111,10 +111,10 @@ def main():
     t0 = time.time()
     for d in ('files', 'files/audio', 'files/fx'):
         os.makedirs(os.path.join(RES, d), exist_ok=True)
-    for f in os.listdir(os.path.join(RES, 'files')):
-        p = os.path.join(RES, 'files', f)
-        if os.path.isfile(p):
-            os.remove(p)
+        for f in os.listdir(os.path.join(RES, d)):
+            p = os.path.join(RES, d, f)
+            if os.path.isfile(p):
+                os.remove(p)
     for f in SRC_SCRIPTS + SRC_FX:                     # the hand written files always come from source/
         shutil.copyfile(os.path.join(HERE, f), os.path.join(RES, f))
     os.makedirs(os.path.join(HERE, '_work'), exist_ok=True)
@@ -164,9 +164,9 @@ def main():
         files.append(txd + '.txd')
         txd_info[txd] = dict(bytes=len(b), textures=[(t['name'], t['w'], t['h'], t['fmt']) for t in lst])
         print('   %-4s %2d textures  %.2f MB' % (txd, len(lst), len(b) / 1048576))
-    # sprite sheets for the client (PNG with alpha): glow, steam, sky noise
+    # sprite sheets for the client (PNG with alpha): glow, steam
     from PIL import Image
-    for n, f in (('nc_glow', 'glow'), ('nc_steam', 'steam'), ('nc_sky_noise', 'sky_noise')):
+    for n, f in (('nc_glow', 'glow'), ('nc_steam', 'steam')):
         p = TX.generate(n, 1)
         a = p.alpha if p.alpha is not None else np.ones(p.albedo.shape[:2], np.float32)
         rgba = np.concatenate([(np.clip(p.albedo, 0, 1) * 255).astype(np.uint8), (np.clip(a, 0, 1) * 255).astype(np.uint8)[..., None]], -1)

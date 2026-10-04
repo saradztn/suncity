@@ -40,5 +40,5 @@ def sky_dome(segs=32, rings=16):
     nrm = -pos                                    # inward normals (visible from the centre)
     uv = np.array(uvs, np.float64)
     M, C = Mesh(), Col()
-    M.add(pos, nrm, uv, np.array(tris, np.int64), 'nc_sky_noise', emis=1.0)
+    M.add(pos, nrm, uv, np.array(tris, np.int64), 'nc_sky_dome', emis=1.0)
     return M, C, dict(kind='skydome', nocol=True, dist=400.0, amb=1.0)
