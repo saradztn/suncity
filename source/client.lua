@@ -654,9 +654,14 @@ local function skyOn()
     local sh, tech = dxCreateShader("sky.fx")
     if not sh then dbg("sky.fx: " .. tostring(tech)) return false end
     if tech == "fallback" then dbg("sky.fx: shader model 3 is not available, sky dome disabled") destroyElement(sh) return false end
+    if S.tex and S.tex.noise then dxSetShaderValue(sh, "gTexture0", S.tex.noise) end   -- cloud noise
+    if not engineApplyShaderToWorldTexture(sh, "nc_sky_noise") then                    -- the dome model texture
+        dbg("sky.fx: could not take over the sky dome texture")
+        destroyElement(sh)
+        return false
+    end
     FX.sky = sh
     FX.tech.sky = tech
-    if S.tex and S.tex.noise then dxSetShaderValue(FX.sky, "gTexture0", S.tex.noise) end   -- cloud noise
     if S.dome and isElement(S.dome) then setElementDimension(S.dome, 0) end
     return true
 end
