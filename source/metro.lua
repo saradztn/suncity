@@ -1,50 +1,80 @@
 -- Created by: Arena.ai Agent Mode (AI) - NightCity MTA:SA resource
 -- -------------------------------------------------------------------------------------------
--- metro.lua - the rideable Night City Metro.  A shuttle train runs the east-west line (NC_METRO)
---             between the west terminus (inside the lit tunnel tube) and the east buffer stop,
---             calling at MARKET / UNION / DOCKS.  Automatic sliding doors open at every stop;
---             press E next to the car (platform or deck) to board - press E again to step out.
---             Uses the helpers client.lua publishes in the global table NC (toWorld / toCity / ...).
+-- metro.lua - the rideable Night City Metro.  The train is the VANILLA GTA:SA consist
+--             (model 538 "streak" engine + three 570 "streakc" carriages) - nothing is
+--             modelled by us.  It circulates a closed loop for ever (clockwise: the north
+--             straight eastbound through the lit tunnel and the three stations MARKET /
+--             UNION / DOCKS, then the east turn, the south return line and the west turn).
+--             Automatic station dwells; press E next to / under the train to ride on the
+--             roof of a carriage - press E again to step out.  /ncmetro teleports to MARKET.
+--             Uses the helpers client.lua publishes in the global table NC.
 -- -------------------------------------------------------------------------------------------
-local ACC = 1.2          -- m/s^2 while motoring
-local BRK = 1.4          -- m/s^2 while braking
-local BAY = { -8.05, -2.68, 2.68, 8.05 }    -- door bay centres along the car (matches nc/rail.py)
-local DOOR_Y = 1.47      -- leaf plane offset from the car centre line
-local DOOR_Z = 1.05      -- leaf origin on the rail top
-local SLIDE = 1.42       -- leaf travel when open (m)
-local SLIDE_T = 1.7      -- seconds for a full slide
-local CLOSE_LEAD = 2.0   -- doors start closing this long before departure
-local RIDE_XMAX = 9.6    -- how far along the car the rider may stand
+local ACC = 1.2            -- m/s^2 while motoring
+local BRK = 1.4            -- m/s^2 while braking
+local CAR_GAP = 23.5       -- centre to centre between cars
+local CARS = { 538, 570, 570, 570 }   -- vanilla GTA:SA train models
+local ROOF_Z = 3.2         -- rider height above the rail top (carriage roof)
+local RIDE_XMAX = 8.0
 
 local M = {
-    on = false, x = 0.0, dir = 1, idx = 1, v = 0.0,
-    dwell = 0.0, slide = 0.0, slideTarget = 0.0,
-    riding = false, rideX = 0.0, last = 0.0,
+    on = false, s = 0.0, v = 0.0, targetS = 0.0, dwell = 0.0,
+    cars = nil, riding = false, rideCar = 1, last = 0.0,
 }
 
-local function stops()
-    -- the full call pattern: west terminus, three stations, east terminus
-    local t = { NC_METRO.park }
-    for i = 1, #NC_METRO.stops do t[#t + 1] = NC_METRO.stops[i] end
-    t[#t + 1] = NC_METRO.pend
-    return t
+local G = {}               -- loop geometry (filled from NC_METRO)
+
+local function buildGeom()
+    local t = NC_METRO
+    G.x0, G.x1, G.y, G.ys, G.r = t.x0, t.x1, t.y, t.ys, t.r
+    G.z = t.z
+    G.ym = (t.y + t.ys) / 2
+    G.l1 = t.x1 - t.x0                              -- north straight (eastbound)
+    G.la = math.pi * t.r                            -- east turn
+    G.l2 = G.l1                                     -- south straight (westbound)
+    G.lb = G.la                                     -- west turn
+    G.total = 2 * (G.l1 + G.la)
+    G.stops = {}                                    -- loop distance of every station call
+    for i = 1, #t.stops do
+        G.stops[i] = t.stops[i] - t.x0
+    end
+end
+
+-- position + travel direction at loop distance s (forward is +y at rz 0)
+local function pathAt(s)
+    s = s % G.total
+    if s < G.l1 then
+        return G.x0 + s, G.y, 1.0, 0.0
+    elseif s < G.l1 + G.la then
+        local phi = math.pi / 2 - (s - G.l1) / G.r
+        return G.x1 + G.r * math.cos(phi), G.ym + G.r * math.sin(phi), math.sin(phi), -math.cos(phi)
+    elseif s < G.l1 + G.la + G.l2 then
+        return G.x1 - (s - G.l1 - G.la), G.ys, -1.0, 0.0
+    else
+        local phi = -math.pi / 2 - (s - G.l1 - G.la - G.l2) / G.r
+        return G.x0 + G.r * math.cos(phi), G.ym + G.r * math.sin(phi), math.sin(phi), -math.cos(phi)
+    end
 end
 
 local function say(msg) if NC and NC.say then NC.say(msg) end end
 
-local function placeTrain()
-    if not (NC.train and isElement(NC.train)) then return end
-    setElementPosition(NC.train, NC.toWorld(M.x, NC_METRO.y, NC_METRO.z))
-    if not NC.doors then return end
-    for k = 1, 8 do
-        local el = NC.doors[k]
-        if el and isElement(el) then
-            local bay = BAY[math.floor((k - 1) / 2) + 1]
-            local side = (k % 2 == 1) and -1 or 1
-            -- each leaf slides toward the middle of the car
-            local sgn = (bay < 0) and 1 or -1
-            local sx = bay + sgn * M.slide * SLIDE
-            setElementPosition(el, NC.toWorld(M.x + sx, NC_METRO.y + side * DOOR_Y, NC_METRO.z + DOOR_Z))
+-- next station call strictly ahead of cur (stations repeat every lap)
+local function nextStop(cur)
+    for lap = 0, 4 do
+        for i = 1, #G.stops do
+            local s = G.stops[i] + lap * G.total
+            if s > cur + 0.5 then return s end
+        end
+    end
+    return cur + G.total
+end
+
+local function placeCars()
+    if not M.cars then return end
+    for i, veh in ipairs(M.cars) do
+        if isElement(veh) then
+            local x, y, dx, dy = pathAt(M.s - (i - 1) * CAR_GAP)
+            setElementPosition(veh, NC.toWorld(x, y, G.z))
+            setElementRotation(veh, 0, 0, math.deg(math.atan2(-dx, dy)))
         end
     end
 end
@@ -57,96 +87,107 @@ local function releaseRider()
 end
 
 local function frame()
-    if not (M.on and NC and NC.isShown() and NC.train and isElement(NC.train)) then return end
+    if not (M.on and M.cars) then return end
     local now = getTickCount()
     local dt = (now - M.last) / 1000
     M.last = now
     if dt > 0.1 then dt = 0.1 end
     if dt <= 0 then return end
 
-    local T = stops()
     local vmax = NC_METRO.vx or 16.0
     if M.dwell > 0 then
-        -- standing at a stop: doors open, closing again shortly before departure
         M.dwell = M.dwell - dt
-        M.slideTarget = (M.dwell > CLOSE_LEAD) and 1.0 or 0.0
-        if M.dwell <= 0 then M.dwell = 0 end
     else
-        M.slideTarget = 0.0
-        local target = T[M.idx + M.dir]
-        if not target then
-            M.dir = -M.dir
-            target = T[M.idx + M.dir]
-        end
-        local d = target - M.x
+        local d = M.targetS - M.s
         local ad = math.abs(d)
         local vpeak = math.min(vmax, math.sqrt(math.max(0.0, 2 * ad * ACC * BRK / (ACC + BRK))))
-        local brake_d = (M.v * M.v) / (2 * BRK)
-        if ad <= brake_d + 0.4 then
-            M.v = math.max(0.0, M.v - BRK * dt)
+        if M.v * M.v / (2 * BRK) >= ad - 0.25 then
+            M.v = math.max(0.0, M.v - BRK * dt)                 -- braking distance reached
         else
             M.v = math.min(vpeak, M.v + ACC * dt)
         end
-        M.x = M.x + (d >= 0 and 1 or -1) * M.v * dt
-        if ad < 0.35 and M.v < 0.6 then
-            M.x = target
+        if M.v * dt >= ad or (M.v <= 0.0 and ad < 1.0) then     -- land exactly on the call point
+            M.s = M.targetS
             M.v = 0.0
-            M.idx = M.idx + M.dir
-            M.dwell = NC_METRO.dw or 7.0
+            M.dwell = NC_METRO.dw or 6.0
+            M.targetS = nextStop(M.s)
+        else
+            M.s = M.s + M.v * dt
         end
     end
 
-    -- door leaves
-    local step = dt / SLIDE_T
-    if M.slide < M.slideTarget then
-        M.slide = math.min(M.slideTarget, M.slide + step)
-    elseif M.slide > M.slideTarget then
-        M.slide = math.max(M.slideTarget, M.slide - step)
-    end
+    placeCars()
 
-    placeTrain()
-
-    -- the rider travels with the car
-    if M.riding then
-        setElementPosition(localPlayer, NC.toWorld(M.x + M.rideX, NC_METRO.y, NC_METRO.z + 1.12))
+    if M.riding and M.cars[M.rideCar] and isElement(M.cars[M.rideCar]) then
+        local x, y = pathAt(M.s - (M.rideCar - 1) * CAR_GAP)
+        setElementPosition(localPlayer, NC.toWorld(x, y, G.z + ROOF_Z))
     end
 end
 
 local function toggleRide()
-    if not (M.on and NC and NC.isShown() and NC.train and isElement(NC.train)) then return end
+    if not (M.on and M.cars) then return end
     if M.riding then
-        -- step out: onto the platform when the doors are open at a station, else onto the deck
         releaseRider()
-        local sideY, sideZ = 2.9, 0.06
-        if M.slide > 0.5 and M.dwell > 0 then
-            sideY, sideZ = 8.5, 1.02
+        local x, y = pathAt(M.s - (M.rideCar - 1) * CAR_GAP)
+        -- step out onto the platform when standing at a station, else onto the track deck
+        local outY, outZ = G.y + 2.6, 0.06
+        if M.dwell > 0 then
+            outY, outZ = G.y + 8.5, 1.02
         end
-        setElementPosition(localPlayer, NC.toWorld(M.x + M.rideX, NC_METRO.y + sideY, NC_METRO.z + sideZ))
+        setElementPosition(localPlayer, NC.toWorld(x, outY, G.z + outZ))
         say("left the metro.")
         return
     end
-    -- board: the player must be near the car at platform / deck height
+    -- board: the player must be near the consist (anywhere along it)
     local px, py, pz = NC.toCity(getElementPosition(localPlayer))
-    local dx, dy, dz = px - M.x, py - NC_METRO.y, pz - NC_METRO.z
-    if math.abs(dx) < 13.5 and math.abs(dy) < 12.5 and math.abs(dz - 1.0) < 3.2 then
-        if NC.stopTour then NC.stopTour() end
-        M.riding = true
-        M.rideX = NC.clamp(dx, -RIDE_XMAX, RIDE_XMAX)
-        setElementFrozen(localPlayer, true)
-        setElementPosition(localPlayer, NC.toWorld(M.x + M.rideX, NC_METRO.y, NC_METRO.z + 1.12))
-        say("aboard the Night City Metro - press E to leave.")
+    for i = 1, #M.cars do
+        local x, y = pathAt(M.s - (i - 1) * CAR_GAP)
+        local dx, dy, dz = px - x, py - y, pz - G.z
+        if math.abs(dx) < 12.0 and math.abs(dy) < 8.0 and dz > -2.5 and dz < 5.5 then
+            if NC.stopTour then NC.stopTour() end
+            M.riding = true
+            M.rideCar = i
+            setElementFrozen(localPlayer, true)
+            setElementPosition(localPlayer, NC.toWorld(x, y, G.z + ROOF_Z))
+            say("aboard the Night City Metro - press E to leave.")
+            return
+        end
     end
 end
 
+local function destroyCars()
+    if M.cars then
+        for _, veh in ipairs(M.cars) do
+            if isElement(veh) then destroyElement(veh) end
+        end
+    end
+    M.cars = nil
+end
+
 local function start()
-    if M.on or not (NC_METRO and NC.train and isElement(NC.train)) then return end
+    if M.on or not NC_METRO then return end
+    buildGeom()
+    -- the consist: vanilla GTA:SA train models, frozen (the driver moves them every frame)
+    M.cars = {}
+    for i, model in ipairs(CARS) do
+        local x, y, dx, dy = pathAt(150.0 - (i - 1) * CAR_GAP)   -- start inside the west tunnel
+        local wx, wy, wz = NC.toWorld(x, y, G.z)
+        local veh = createVehicle(model, wx, wy, wz, 0, 0, math.deg(math.atan2(-dx, dy)))
+        if veh then
+            setElementFrozen(veh, true)
+            pcall(setVehicleDamageProof, veh, true)
+            pcall(setVehicleLocked, veh, true)
+            pcall(setVehicleEngineState, veh, false)
+            setElementCollisionsEnabled(veh, true)
+            M.cars[#M.cars + 1] = veh
+        end
+    end
+    if #M.cars == 0 then M.cars = nil say("metro: could not create the train.") return end
     M.on = true
-    M.x = NC_METRO.park
-    M.dir = 1
-    M.idx = 1
+    M.s = 150.0
     M.v = 0.0
-    M.dwell = NC_METRO.dw or 7.0
-    M.slide = 0.0
+    M.dwell = 0.0
+    M.targetS = nextStop(M.s)
     M.last = getTickCount()
     addEventHandler("onClientPreRender", root, frame)
     bindKey("e", "down", toggleRide)
@@ -158,35 +199,15 @@ local function stop()
     removeEventHandler("onClientPreRender", root, frame)
     unbindKey("e", "down", toggleRide)
     releaseRider()
+    destroyCars()
 end
 
-local pollTimer = nil
-
-local function stopPoll()
-    if pollTimer then killTimer(pollTimer) pollTimer = nil end
-end
-
--- the train is spawned with the rest of the city: once client.lua reports the build done
--- (NC.onShow) wait for it on a quiet timer - no persistent pre-render handler while idle
-local function startPoll()
-    if pollTimer then return end
-    pollTimer = setTimer(function()
-        if M.on then return end
-        if NC and NC.isShown() and NC.train and isElement(NC.train) and NC_METRO then
-            stopPoll()
-            start()
-        end
-    end, 250, 0)
-end
-
--- client.lua clears NC.train / NC.doors and then calls NC.onHide
 NC.onHide = function()
     stop()
-    stopPoll()
 end
 
 NC.onShow = function()
-    startPoll()
+    start()
 end
 
 NC_METRO_RT = M          -- introspection for the test harness (M.on while the driver runs)
@@ -194,8 +215,6 @@ NC_METRO_RT = M          -- introspection for the test harness (M.on while the d
 addCommandHandler("ncmetro", function()
     if not (NC and NC.isShown()) then return say("show the city first (/ncshow).") end
     if M.riding then toggleRide() end
-    -- jump to the MARKET platform
-    local s = NC_METRO.stops[1]
-    setElementPosition(localPlayer, NC.toWorld(s, NC_METRO.y + 8.5, NC_METRO.z + 1.02))
-    say("Night City Metro: press E next to the train to ride.")
+    setElementPosition(localPlayer, NC.toWorld(NC_METRO.stops[1], NC_METRO.y + 8.5, NC_METRO.z + 1.02))
+    say("Night City Metro: press E near the train to ride.")
 end)

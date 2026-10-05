@@ -210,10 +210,11 @@ def main():
     ll.append('-- the river road tunnel (x = axis, y0 / y1 = open cut mouths, cov0 / cov1 = covered part, zf = flat road level, hw = half width)')
     ll.append('NC_TUNNEL = { x = %.2f, y0 = %.2f, y1 = %.2f, cov0 = %.2f, cov1 = %.2f, zf = %.2f, hw = %.1f }' % (tg['x'], tg['y_in'], tg['y_out'], tg['y_cov0'], tg['y_cov1'], tg['z_floor'], 7.0))
     mt = plan.metro
-    ll.append('-- the Night City Metro: y / z = line (rail top), x0 / x1 = guideway ends, park / pend = termini,')
-    ll.append('-- stops = station x list (MARKET / UNION / DOCKS), dw = dwell seconds, vx = service speed')
-    ll.append('NC_METRO = { y = %.2f, z = %.2f, x0 = %.1f, x1 = %.1f, park = %.1f, pend = %.1f, stops = { %.1f, %.1f, %.1f }, dw = 7.0, vx = 16.0 }'
-              % (mt['y'], mt['z'], mt['x0'], mt['x1'], mt['park_x'], mt['end_x'], mt['stops'][0], mt['stops'][1], mt['stops'][2]))
+    ll.append('-- the Night City Metro (closed loop): y / ys = north and south straights (rail top z),')
+    ll.append('-- x0 / x1 = straight ends, r = turn radius, stops = station x list (north straight),')
+    ll.append('-- dw = dwell seconds, vx = service speed')
+    ll.append('NC_METRO = { y = %.2f, ys = %.2f, z = %.2f, x0 = %.1f, x1 = %.1f, r = %.1f, stops = { %.1f, %.1f, %.1f }, dw = 6.0, vx = 16.0 }'
+              % (mt['y'], mt['ys'], mt['z'], mt['x0'], mt['x1'], mt['r'], mt['stops'][0], mt['stops'][1], mt['stops'][2]))
     surf = {}
     for txdname, mset in used_mats.items():
         for n in mset:

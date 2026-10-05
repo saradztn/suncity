@@ -303,6 +303,17 @@ def(C, "createObject", "nnnn|nnnb", function(model, x, y, z, rx, ry, rz)
     return newEl("object", { model = model, x = x, y = y, z = z, rx = rx or 0, ry = ry or 0, rz = rz or 0, frozen = false, collisions = true }, resourceRoot)
 end)
 
+-- vanilla GTA:SA vehicles (the metro consist is built from the train model IDs)
+def(C, "createVehicle", "nnnn|nnn", function(model, x, y, z, rx, ry, rz)
+    if model < 400 or model > 611 then return false end
+    local v = newEl("vehicle", { model = model, x = x, y = y, z = z, rx = rx or 0, ry = ry or 0, rz = rz or 0, frozen = false }, resourceRoot)
+    T.vehicles[#T.vehicles + 1] = v
+    return v
+end)
+def(C, "setVehicleDamageProof", "eb", function(v, b) if v.kind ~= "vehicle" then error("setVehicleDamageProof: not a vehicle", 2) end v.damageProof = b return true end)
+def(C, "setVehicleLocked", "eb", function(v, b) if v.kind ~= "vehicle" then error("setVehicleLocked: not a vehicle", 2) end v.locked = b return true end)
+def(C, "setVehicleEngineState", "eb", function(v, b) if v.kind ~= "vehicle" then error("setVehicleEngineState: not a vehicle", 2) end v.engine = b return true end)
+
 -- water
 def(C, "createWater", "nnnnnnnnn|nnn", function(...)
     local a = { ... }

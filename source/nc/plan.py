@@ -46,11 +46,12 @@ HERO_BRIDGE_LINE = 6
 # polygon lies above it: GTA treats everything below a water polygon as water, so the tunnel stays away from the river on purpose.
 TUNNEL = dict(line=9, row_in=6, g=0.10, L_open=64.0, PT=1.2, flat_L=64.0, flat_n=5, variants=(0, 1, 2, 1, 0), start=15.0)
 
-# the rideable Night City Metro: east-west line along the river's north bank (y = -5, just above the
-# water's edge), rail top at z = 13.  The west end dives into a lit tunnel tube with an arched portal;
-# three stations (MARKET / UNION / DOCKS) with level boarding, a shuttle train parked at the west terminus.
-METRO = dict(y=-5.0, z=13.0, x0=-468.0, x1=468.0, portal_x=-156.0,
-             stops=(-84.0, 168.0, 396.0), park_x=-438.0, end_x=450.0, buffer_x=462.0)
+# the rideable Night City Metro: a CLOSED LOOP over the river.  The north straight (y = -5,
+# rail top z = 13) dives through a lit tunnel tube in its west half and serves the three stations
+# (MARKET / UNION / DOCKS); 180 degree turns at both ends (radius 25) close the loop through the
+# south return line (y = -55).  The train (vanilla GTA:SA consist) circulates clockwise for ever.
+METRO = dict(y=-5.0, ys=-55.0, z=13.0, x0=-468.0, x1=444.0, r=25.0, portal_x=-156.0,
+             stops=(-84.0, 168.0, 396.0))
 
 STYLE = {'C': 'core', 'K': 'core', 'P': 'core', 'E': 'ent', 'G': 'ent', 'M': 'market', 'R': 'res', 'W': 'ent', 'I': 'ind', 'T': 'ind', 'F': 'ind', 'Y': 'ind', '~': 'ent'}
 PAD = {'C': 'nc_plaza', 'K': 'nc_plaza', 'P': 'nc_plaza', 'E': 'nc_sidewalk', 'G': 'nc_sidewalk', 'M': 'nc_sidewalk', 'R': 'nc_sidewalk', 'W': 'nc_sidewalk', 'I': 'nc_concrete', 'T': 'nc_concrete', 'F': 'nc_concrete', 'Y': 'nc_concrete'}
@@ -393,41 +394,33 @@ def build_plan():
     for pt_ in tg['parts']:
         m = plan.model('i', pt_['builder'], pt_['args'], hint='tunnel')
         plan.place(m, tg['x'], pt_['y'], pt_['z'], pt_['rz'], 'tunnel')
-    # ------------------------------------------------------------------ the Night City Metro
-    MY, MZ = METRO['y'], METRO['z']
+    # ------------------------------------------------------------------ the Night City Metro (closed loop)
+    MY, MYS, MZ = METRO['y'], METRO['ys'], METRO['z']
     x0m, x1m = METRO['x0'], METRO['x1']
-    deck = plan.model('i', 'rail_deck', dict(), hint='metro deck')
-    for k in range(int(round((x1m - x0m) / 12.0))):
-        plan.place(deck, x0m + 6.0 + 12.0 * k, MY, MZ, 0.0, 'metro')
-    pylon = plan.model('i', 'rail_pylon', dict(), hint='metro pylon')
-    bx = [X[line] for line in BRIDGE_LINES]                      # bridge decks: no pier beside them
-    k = 0
-    while x0m + 6.0 + 24.0 * k <= x1m - 6.0:
-        px = x0m + 6.0 + 24.0 * k
-        if min(abs(px - b) for b in bx) >= 18.0:
-            plan.place(pylon, px, MY, MZ, 0.0, 'metro')
-        k += 1
+    span = plan.model('i', 'rail_deck', dict(variant=0), hint='metro span')
+    span_clear = plan.model('i', 'rail_deck', dict(variant=1), hint='metro span (bridge crossing)')
+    bx = [X[line] for line in BRIDGE_LINES]                  # bridge decks: no pier beside them
+    ns = int(round((x1m - x0m) / 48.0))
+    for yy in (MY, MYS):                                     # north straight + south return
+        for k in range(ns):
+            cx = x0m + 24.0 + 48.0 * k
+            near = min(min(abs(cx - 12.0 - b), abs(cx + 12.0 - b)) for b in bx)
+            plan.place(span if near >= 18.0 else span_clear, cx, yy, MZ, 0.0, 'metro')
+    curve = plan.model('i', 'rail_curve', dict(), hint='metro loop turn')
+    plan.place(curve, x1m, (MY + MYS) / 2, MZ, 0.0, 'metro')       # east turn (bulges east)
+    plan.place(curve, x0m, (MY + MYS) / 2, MZ, 180.0, 'metro')     # west turn (bulges west)
     tube = plan.model('i', 'rail_tube', dict(), hint='metro tube')
-    nt = int(round((METRO['portal_x'] - x0m) / 12.0))
+    nt = int(round((METRO['portal_x'] - x0m) / 24.0))
     for k in range(nt):
-        plan.place(tube, x0m + 6.0 + 12.0 * k, MY, MZ, 0.0, 'metro')
+        plan.place(tube, x0m + 12.0 + 24.0 * k, MY, MZ, 0.0, 'metro')
     portal = plan.model('i', 'rail_portal', dict(), hint='metro portal')
     plan.place(portal, METRO['portal_x'], MY, MZ, 0.0, 'metro')
     for v, sx in enumerate(METRO['stops']):
         st = plan.model('i', 'rail_station', dict(variant=v), hint='metro station %d' % v)
         plan.place(st, sx, MY, MZ, 0.0, 'metro')
-    buf = plan.model('i', 'rail_buffer', dict(), hint='metro buffer')
-    plan.place(buf, METRO['buffer_x'], MY, MZ, 0.0, 'metro')
     sig = plan.model('i', 'rail_signal', dict(), hint='metro signal')
-    for sx in (-126.0, -30.0, 228.0, 450.0):
+    for sx in (-126.0, -30.0, 228.0, 400.0):
         plan.place(sig, sx, MY + 3.2, MZ, 0.0, 'metro')
-    # the shuttle train (parked at the west terminus inside the tube) + its sliding door leaves
-    train = plan.model('i', 'metro', dict(), hint='metro train', name='nc_metro')
-    plan.place(train, METRO['park_x'], MY, MZ, 0.0, 'metro')
-    door = plan.model('i', 'metro_door', dict(), hint='metro door', name='nc_metro_door')
-    for dx in (-8.05, -2.68, 2.68, 8.05):
-        for sy in (-1.47, 1.47):
-            plan.place(door, METRO['park_x'] + dx, MY + sy, MZ + 1.05, 0.0, 'metro')
     plan.metro = METRO
     # ------------------------------------------------------------------ sky bridges between neighbouring core / entertainment towers
     sky = []
@@ -482,7 +475,7 @@ def build_plan():
         metro_union=(METRO['stops'][1], METRO['y'] + 8.5, METRO['z'] + 1.0),
         metro_docks=(METRO['stops'][2], METRO['y'] + 8.5, METRO['z'] + 1.0),
         metro_portal=(METRO['portal_x'] + 16.0, METRO['y'] - 10.0, METRO['z'] + 2.0),
-        metro_park=(METRO['park_x'], METRO['y'] - 10.0, METRO['z'] + 2.0),
+        metro_loop=(METRO['x0'] - 12.0, (METRO['y'] + METRO['ys']) / 2, METRO['z'] + 2.0),
         tunnel_in=(tg['x'], tg['y_in'] - 14.0, 1.0),
         tunnel_out=(tg['x'], tg['y_out'] + 14.0, 1.0),
         tunnel_mid=(tg['x'], (tg['y_a'] + tg['y_b']) / 2, tg['z_floor'] + 1.0),
