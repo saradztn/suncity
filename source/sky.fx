@@ -2,6 +2,9 @@
 // sky.fx - procedural sky dome (the camera-following sphere model "skydome", drawn at the far plane).
 //   * scattering-shaped sky: zenith / horizon gradient whose brightening follows the sun side (Mie forward scatter)
 //   * real sun disc with limb darkening + halo, moon with a soft glow, star field at night
+//     (the cloud deck was removed on purpose: its dark bases read as black rays / smudges
+//      around the moon and the user asked to delete them - only the gCloud* uniforms remain,
+//      the weather engine still drives them)
 //   * two drifting cloud layers from PROCEDURAL value noise (computed in the shader - no texture to load,
 //     bind or magnify): coverage from the weather, lit toward the sun with a silver lining, dark bases, storm
 //     darkening, horizon fade into the haze band
@@ -177,27 +180,14 @@ float4 PixelShaderFunction(PSInput PS) : COLOR0
         col += float3(0.85, 0.9, 1.0) * (star * tw * 1.7 * night * smoothstep(0.02, 0.25, dir.z));
     }
 
-    // ---- clouds: two layers, lit toward the sun, silver lining, dark bases
-    float cover = gCloudCover;
-    float c1 = cloudLayer(dir, 520.0, 430.0, cover, 0.0);
-    float c2 = 0.0;
-    if (gQuality >= 1.5)
-    {
-        c2 = cloudLayer(dir, 330.0, 190.0, saturate(cover * 0.85), 3.7) * 0.8;
-    }
-    float cov = saturate(c1 + c2 * (1.0 - c1 * 0.55));
-    float3 cl = lerp(gZenith * 0.55 + gHorizon * 0.45, float3(0.06, 0.065, 0.08), saturate(cov * 1.25) * 0.55);
-    cl *= lerp(gCloudDark, 1.18, pow(mu2, 2.2));
-    cl += gSunColor * (gSunI * 0.75 + 0.06) * pow(saturate(mu), 10.0) * (1.0 - saturate(cov * 1.6)) * cov * 0.8;
-    cl += gSunColor * (gSunI * 0.2) * pow(saturate(mu), 3.0) * cov * 0.35;
-    float cf = smoothstep(0.0, 0.35, cov);
-    col = lerp(col, cl, cf * smoothstep(0.01, 0.12, dir.z));
+    // ---- clouds: DELETED (see the header) - the dark deck was the "black rays" around the moon.
+    //      The gCloud* uniforms stay declared so the weather engine (and its tests) keep working.
 
     // ---- below the horizon: the haze the distant geometry fades into
     col = lerp(col, gFogColor, smoothstep(0.0, -0.16, dir.z));
 
-    // ---- lightning lights the clouds and the sky
-    col += gFlash * (0.30 + 0.70 * cov) * float3(0.82, 0.86, 1.0) * (0.45 + 0.55 * up);
+    // ---- lightning lights the sky
+    col += gFlash * 0.30 * float3(0.82, 0.86, 1.0) * (0.45 + 0.55 * up);
 
     return float4(saturate(col * gDim), 1.0);
 }
