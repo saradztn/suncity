@@ -68,10 +68,12 @@ for root_, _, fs in os.walk(FILES):
         on_disk.add(os.path.relpath(os.path.join(root_, f), RES).replace(os.sep, '/'))
 on_disk |= {f for f in os.listdir(RES) if f.endswith('.fx')}
 check(on_disk == set(mfiles), 'meta.xml lists exactly the files on disk (%d files)' % len(mfiles))
-check(('client.lua', 'client') in scripts and ('server.lua', 'server') in scripts and ('tour.lua', 'client') in scripts, 'client, tour and server scripts declared')
+check(('client.lua', 'client') in scripts and ('server.lua', 'server') in scripts and ('tour.lua', 'client') in scripts and ('metro.lua', 'client') in scripts, 'client, metro, tour and server scripts declared')
 order = [s for s, t in scripts if t == 'client']
-check(order.index('models.lua') < order.index('layout.lua') < order.index('sprites.lua') < order.index('env.lua') < order.index('client.lua') < order.index('tour.lua'), 'client script order: data before logic, env before its users, tour after client')
+check(order.index('models.lua') < order.index('layout.lua') < order.index('sprites.lua') < order.index('env.lua') < order.index('client.lua') < order.index('metro.lua') < order.index('tour.lua'), 'client script order: data before logic, env before its users, metro / tour after client')
 check(meta.find('min_mta_version') is not None and meta.find('min_mta_version').get('client'), 'min_mta_version (client) declared')
+lay = rd('layout.lua')
+check('NC_METRO' in lay and 'NC_TUNNEL' in lay, 'layout.lua exports NC_METRO and NC_TUNNEL for the runtimes')
 check(meta.find('info').get('name') == 'NightCity', 'resource info present')
 
 # ====================================================================================================================================
@@ -83,7 +85,7 @@ for f in sorted({s for s, _ in scripts}):
     check(good, 'Lua 5.1 syntax of %s %s' % (f, err))
 import mta_lua_static
 problems = []
-for files, api, label in ((['models.lua', 'layout.lua', 'sprites.lua', 'env.lua', 'client.lua', 'tour.lua'], mta_lua_static.CLIENT_API, 'client'), (['layout.lua', 'server.lua'], mta_lua_static.SERVER_API, 'server')):
+for files, api, label in ((['models.lua', 'layout.lua', 'sprites.lua', 'env.lua', 'client.lua', 'metro.lua', 'tour.lua'], mta_lua_static.CLIENT_API, 'client'), (['layout.lua', 'server.lua'], mta_lua_static.SERVER_API, 'server')):
     p, used, _ = mta_lua_static.check(files, api, label)
     problems += p
     ok('%s: %d distinct MTA functions, all exist in the MTA %s API' % (label, len(used), label) if not p else '%s: problems' % label)
@@ -299,7 +301,7 @@ for o in OBJECTS:
 check(len(OBJECTS) <= 600, '%d objects (MTA streams about 600 ordinary objects at once; limit 600): %s' % (len(OBJECTS), tags))
 check(all(1 <= o[0] <= len(MODELS) for o in OBJECTS), 'every object refers to a model')
 check({o[0] for o in OBJECTS} == set(range(1, len(MODELS) + 1)), 'every model is placed at least once')
-check(all(o[5] in ('ground', 'bld', 'infra', 'bridge', 'sky', 'skyline', 'tunnel') for o in OBJECTS), 'object tags are known')
+check(all(o[5] in ('ground', 'bld', 'infra', 'bridge', 'sky', 'skyline', 'tunnel', 'metro') for o in OBJECTS), 'object tags are known')
 check(len({(o[0], round(o[1], 1), round(o[2], 1), round(o[3], 1)) for o in OBJECTS}) == len(OBJECTS), 'no object is placed twice at the same spot')
 check(all(-40 < o[3] < 400 for o in OBJECTS), 'object heights are sane (-40 .. 400 m)')
 check(all(abs(o[4] % 90) < 1e-6 or abs(o[4] % 90 - 90) < 1e-6 for o in OBJECTS), 'rotations are multiples of 90 degrees')

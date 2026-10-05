@@ -1,6 +1,6 @@
 # Created by: Arena.ai Agent Mode (AI) - NightCity MTA:SA asset pipeline
 # registry.py - model name -> geometry: calls the right generator for every model of the plan.
-from . import ground, bld, infra, tunnel, skydome
+from . import ground, bld, infra, tunnel, skydome, rail
 
 
 def build_model(plan, name):
@@ -14,4 +14,6 @@ def build_model(plan, name):
         return bld.ARCH[b](**a)
     if b.startswith('tunnel_'):
         return getattr(tunnel, b)(**a)
+    if b.startswith('rail_') or b in ('metro', 'metro_door'):
+        return getattr(rail, b)(**a)
     return getattr(infra, b)(**a)

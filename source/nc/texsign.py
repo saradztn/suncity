@@ -7,7 +7,7 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from lib.noise import smooth
-from .texkit import PBR, coords, lerp, rgb, blur, fbm, grain, rect_aa, FONT_B, FONT_R, FONT_M, load_font
+from .texkit import PBR, coords, lerp, rgb, blur, fbm, grain, rect_aa, FONT_B, FONT_R, FONT_M, load_font, draw_text_img
 from .texgen import REG, reg
 
 WARM = rgb(1.00, 0.70, 0.40)
@@ -615,3 +615,56 @@ def vent(h, w, seed):
     a = np.zeros((h, w, 3), np.float32) + 0.28
     a = lerp(a, rgb(0.03, 0.03, 0.035), sl[..., None] * 0.9)
     return PBR(a, 0.45, 0.8 * np.ones((h, w), np.float32), -sl * 0.7)
+
+# ---------------------------------------------------------------------------------------------
+# metro line signage: 2x2 atlas - cell 0 = NIGHT CITY METRO logo, cells 1..3 = station names
+# ---------------------------------------------------------------------------------------------
+METRO_CELLS = 4
+
+
+def metro_sign_uv(idx, pad=0.02):
+    """uv rect (u0, v0, u1, v1) of atlas cell: 0 = logo, 1 = MARKET, 2 = UNION, 3 = DOCKS."""
+    idx = idx % METRO_CELLS
+    c, r = idx % 2, idx // 2
+    return (c / 2 + pad, r / 2 + pad, (c + 1) / 2 - pad, (r + 1) / 2 - pad)
+
+
+@reg('nc_metro_sign', 256, 128)
+def metro_sign(h, w, seed):
+    """Night City Metro line board atlas.  Cell 0: the 'NIGHT CITY METRO' roundel-style logo
+    (amber type + red line on deep navy).  Cells 1-3: station name boards (MARKET / UNION / DOCKS)."""
+    navy = np.array([0.030, 0.045, 0.085], np.float32)
+    a = np.zeros((h, w, 3), np.float32) + navy
+    e = np.zeros((h, w, 3), np.float32)
+    img = Image.new('RGB', (w, h), (8, 11, 22))
+    d = ImageDraw.Draw(img)
+    de_img = Image.new('RGB', (w, h), (0, 0, 0))
+    de = ImageDraw.Draw(de_img)
+    amber = (255, 176, 48)
+    red = (224, 28, 32)
+    white = (232, 238, 248)
+
+    def paste_text(x, y, text, size, fill, stroke=1):
+        layer = draw_text_img(w, h, text, size, fill=fill + (255,), anchor='mm', xy=(x, y), stroke=stroke)
+        img.paste(Image.new('RGB', (w, h), fill), (0, 0), layer)
+        de_img.paste(Image.new('RGB', (w, h), fill), (0, 0), layer)
+
+    cw, ch = w // 2, h // 2
+    # cell 0 - the roundel logo
+    d.rectangle((0, 0, cw - 1, ch - 1), fill=(9, 13, 26))
+    d.rectangle((0, 0, cw - 1, 4), fill=red)                 # red top bar
+    d.rectangle((0, ch - 5, cw - 1, ch - 1), fill=red)       # red bottom bar
+    paste_text(cw // 2, ch // 2 - 10, 'NIGHT CITY', 17, amber)
+    paste_text(cw // 2, ch // 2 + 10, 'METRO', 21, amber)
+    # cells 1-3 - station boards
+    for i, name in enumerate(('MARKET', 'UNION', 'DOCKS')):
+        cx, cy = (i + 1) % 2 * cw, (i + 1) // 2 * ch
+        d.rectangle((cx, cy, cx + cw - 1, cy + ch - 1), fill=(10, 14, 28))
+        d.rectangle((cx, cy, cx + cw - 1, cy + 5), fill=red)
+        d.rectangle((cx, cy + ch - 6, cx + cw - 1, cy + ch - 1), fill=red)
+        paste_text(cx + cw // 2, cy + ch // 2, name, 22, white)
+    a = np.asarray(img, np.float32) / 255.0
+    e = np.asarray(de_img, np.float32) / 255.0
+    r = 0.38 + 0.2 * grain(h, w, seed)
+    m = np.full((h, w), 0.25, np.float32)
+    return PBR(a, r, m, None, e * 1.25)

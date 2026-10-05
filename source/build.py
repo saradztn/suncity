@@ -24,7 +24,7 @@ OUT = os.path.abspath(os.path.join(HERE, '..'))
 RES = os.path.join(OUT, 'resource', 'NightCity')
 TXD_OF = {'g': 'ncg', 'b': 'ncb', 'i': 'nci', 's': 'nci'}
 ALPHA_MATS = {'nc_glow', 'nc_steam'}
-SRC_SCRIPTS = ['client.lua', 'env.lua', 'tour.lua', 'server.lua']
+SRC_SCRIPTS = ['client.lua', 'env.lua', 'tour.lua', 'metro.lua', 'server.lua']
 SRC_FX = ['wet.fx', 'post.fx', 'sky.fx', 'water.fx']
 
 
@@ -209,6 +209,11 @@ def main():
     tg = plan.tunnel
     ll.append('-- the river road tunnel (x = axis, y0 / y1 = open cut mouths, cov0 / cov1 = covered part, zf = flat road level, hw = half width)')
     ll.append('NC_TUNNEL = { x = %.2f, y0 = %.2f, y1 = %.2f, cov0 = %.2f, cov1 = %.2f, zf = %.2f, hw = %.1f }' % (tg['x'], tg['y_in'], tg['y_out'], tg['y_cov0'], tg['y_cov1'], tg['z_floor'], 7.0))
+    mt = plan.metro
+    ll.append('-- the Night City Metro: y / z = line (rail top), x0 / x1 = guideway ends, park / pend = termini,')
+    ll.append('-- stops = station x list (MARKET / UNION / DOCKS), dw = dwell seconds, vx = service speed')
+    ll.append('NC_METRO = { y = %.2f, z = %.2f, x0 = %.1f, x1 = %.1f, park = %.1f, pend = %.1f, stops = { %.1f, %.1f, %.1f }, dw = 7.0, vx = 16.0 }'
+              % (mt['y'], mt['z'], mt['x0'], mt['x1'], mt['park_x'], mt['end_x'], mt['stops'][0], mt['stops'][1], mt['stops'][2]))
     surf = {}
     for txdname, mset in used_mats.items():
         for n in mset:
@@ -230,7 +235,7 @@ def main():
     open(os.path.join(RES, 'sprites.lua'), 'w').write('\n'.join(sl) + '\n')
     print('   %d objects, %d sprites' % (len(plan.placements), len(sp_rows)))
     fx = [f for f in SRC_FX if os.path.exists(os.path.join(RES, f))]
-    scripts = [('models.lua', 'client'), ('layout.lua', 'client'), ('sprites.lua', 'client'), ('env.lua', 'client'), ('client.lua', 'client'), ('tour.lua', 'client'),
+    scripts = [('models.lua', 'client'), ('layout.lua', 'client'), ('sprites.lua', 'client'), ('env.lua', 'client'), ('client.lua', 'client'), ('metro.lua', 'client'), ('tour.lua', 'client'),
                ('layout.lua', 'server'), ('server.lua', 'server')]
     mx = ['<!-- Created by: Arena.ai Agent Mode (AI) - NightCity MTA:SA resource -->', '<meta>',
           '    <info author="Arena.ai Agent Mode" name="NightCity" version="2.0.0" type="script"',

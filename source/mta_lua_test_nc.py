@@ -63,7 +63,7 @@ def boot(server_patch=None, drop_files=()):
         for v in fx_vars(os.path.join(RES, fx)):
             t[v] = True
         T.fxvars[fx] = t
-    for f in ('models.lua', 'layout.lua', 'sprites.lua', 'env.lua', 'client.lua', 'tour.lua'):
+    for f in ('models.lua', 'layout.lua', 'sprites.lua', 'env.lua', 'client.lua', 'metro.lua', 'tour.lua'):
         T.load('client', f, rd(f))
     srv = rd('server.lua')
     if server_patch:
@@ -94,6 +94,12 @@ def wait_for(T, cond, max_ms=180000, dt=50):
 
 def world(T, k):
     return T.world[k]
+
+
+def metro_frames(T):
+    """onClientPreRender handlers owned by metro.lua (its driver runs while the city is shown)"""
+    rt = T.globalOf('client', 'NC_METRO_RT')
+    return 1 if (rt is not None and rt.on) else 0
 
 
 def errors(T):
@@ -336,7 +342,7 @@ T.cmd('client', 'nctour')
 check(bool(T.player.frozen), 'the tour freezes the player')
 cams = []
 t = 0
-while T.handlerCount('client', 'onClientPreRender') > 1 and t < (dur + 30) * 1000:
+while T.handlerCount('client', 'onClientPreRender') > 1 + metro_frames(T) and t < (dur + 30) * 1000:
     T.frame(50)
     t += 50
     cams.append([float(v) for v in (T.cam[1], T.cam[2], T.cam[3], T.cam[4], T.cam[5], T.cam[6])])
@@ -364,7 +370,7 @@ check(off_map == 0, 'the camera never leaves the city surroundings')
 T.cmd('client', 'nctour')
 adv(T, 2000)
 check(T.press('space'), 'space is bound while the tour runs')
-check(T.handlerCount('client', 'onClientPreRender') == 1 and T.camIsPlayer(), 'space stops the tour at once (only the environment frame is left)')
+check(T.handlerCount('client', 'onClientPreRender') == 1 + metro_frames(T) and T.camIsPlayer(), 'space stops the tour at once (only the environment / metro frames are left)')
 
 print('\n== free camera ==')
 T.cmd('client', 'ncfree')
@@ -389,7 +395,7 @@ T.frame(20)
 look1 = (T.cam[4] - T.cam[1], T.cam[5] - T.cam[2])
 check(abs(look0[0] - look1[0]) + abs(look0[1] - look1[1]) > 1.0, 'the mouse turns the camera')
 T.cmd('client', 'ncfree')
-check(T.handlerCount('client', 'onClientCursorMove') == 0 and T.handlerCount('client', 'onClientPreRender') == 1 and T.camIsPlayer() and bool(T.player.frozen) is False, '/ncfree again: camera and player restored')
+check(T.handlerCount('client', 'onClientCursorMove') == 0 and T.handlerCount('client', 'onClientPreRender') == 1 + metro_frames(T) and T.camIsPlayer() and bool(T.player.frozen) is False, '/ncfree again: camera and player restored')
 
 print('\n== /ncz and the server ==')
 o = T.firstObject()
@@ -562,6 +568,50 @@ check(T.chatContains('not allowed') and T.alive('object') == 0, 'ADMIN_ONLY: non
 T.aclAdmin = True
 T.cmd('server', 'ncshow')
 check(wait_for(T, lambda: T.alive('object') >= N_OBJECTS, 60000), 'ADMIN_ONLY: an admin can')
+
+print('\n== metro: the rideable Night City Metro ==')
+lua, T = boot()
+G = lambda n: T.globalOf('client', n)
+NC = G('NC')
+MET = G('NC_METRO')
+check(MET is not None and abs(float(MET['y']) + 5.0) < 1e-6 and len(MET['stops']) == 3, 'NC_METRO data exported (line y=-5, 3 stations)')
+T.cmd('server', 'ncshow')
+check(wait_for(T, lambda: T.alive('object') >= N_OBJECTS, 60000), 'city shown')
+check(wait_for(T, lambda: NC.train is not None, 20000), 'the train object is registered in NC.train')
+check(NC.doors is not None and len(NC.doors) == 8, 'the 8 sliding door leaves are registered')
+tx0, ty0, tz0 = xyz(T, NC.train)
+wx, wy, wz = NC.toWorld(float(MET['park']), float(MET['y']), float(MET['z']))
+check(abs(tx0 - wx) < 1e-3 and abs(ty0 - wy) < 1e-3 and abs(tz0 - wz) < 1e-3, 'the train starts at the west terminus (inside the tube)')
+d1 = NC.doors[1]
+dx0, _, _ = xyz(T, d1)
+adv(T, 3500)                                   # doors slide open during the first dwell
+dx1, _, _ = xyz(T, d1)
+check(dx1 - dx0 > 0.25, 'doors slide open while the train dwells at the terminus')
+adv(T, 42000)                                  # depart, run to MARKET (354 m)
+tx1, _, _ = xyz(T, NC.train)
+mx, my, mz = NC.toWorld(float(MET['stops'][1]), float(MET['y']), float(MET['z']))
+check(abs(tx1 - mx) < 6.0, 'the train reaches the MARKET station and stops (tx=%.1f market=%.1f)' % (tx1, mx))
+adv(T, 2500)
+dx2, _, _ = xyz(T, NC.doors[1])
+check(dx2 - dx1 > 0.25 or dx2 - dx0 > 0.5, 'doors open again at MARKET')
+# board: stand beside the car at platform height and press E
+T.player.x, T.player.y, T.player.z = tx1 + 2.0, float(wy) + 6.0, float(wz) + 1.6
+T.binds['e:down']()
+check(bool(T.player.frozen), 'E near the car boards the train (player held)')
+adv(T, 1200)
+px, _, _ = xyz(T, T.player)
+tx2, _, _ = xyz(T, NC.train)
+check(abs(px - tx2) < 12.0, 'the rider travels with the train')
+T.binds['e:down']()
+check(not bool(T.player.frozen), 'E again leaves the train')
+T.cmd('client', 'ncmetro')
+check(T.chatContains('Night City Metro'), '/ncmetro drops the player at the MARKET platform')
+adv(T, 300)
+T.binds['e:down']()
+check(bool(T.player.frozen), '/ncmetro then boards with E')
+T.cmd('server', 'nchide')
+check(not bool(T.player.frozen), '/nchide while riding releases the player')
+check(not errors(T), 'no error: %s' % errors(T)[:2])
 
 print('\n== result: %d checks passed, %d failed ==' % (passed[0], len(fails)))
 for f in fails:

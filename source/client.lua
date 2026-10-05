@@ -163,6 +163,13 @@ local function spawnOne(o, i)
     local ob = createObject(id, x, y, z, 0, 0, o[5])
     if not ob then return nil end
     setElementFrozen(ob, true)                   -- map geometry: never moved by physics
+    local nm = NC_MODELS[o[1]] and NC_MODELS[o[1]].name or ""
+    if nm == "nc_metro" then
+        NC.train = ob                            -- the shuttle train: metro.lua drives it
+    elseif nm == "nc_metro_door" then
+        NC.doors = NC.doors or {}
+        NC.doors[#NC.doors + 1] = ob             -- the sliding leaves (metro.lua animates them)
+    end
     if o[6] == "skyline" then setElementCollisionsEnabled(ob, false) end
     if i == S.domeIdx then
         -- the sky dome: no collisions, parked in another dimension until the sky shader is on (it follows the camera)
@@ -886,6 +893,7 @@ local function showCity(zoff, ax, ay, az)
             startSprites()
             startAmbience()
             fxSet(2)
+            if NC and NC.onShow then NC.onShow() end     -- the metro runtime picks up its train
             local P = NC_POINTS.spawn
             local x, y, z = toWorld(P[1], P[2], P[3])
             if near then
@@ -916,6 +924,7 @@ function clearCity()
     restoreAtmosphere()
     if S.hold then setElementFrozen(localPlayer, false) S.hold = nil end
     S.shown = false
+    if NC then NC.train, NC.doors = nil, nil end
     if NC and NC.onHide then NC.onHide() end
 end
 
@@ -1041,7 +1050,7 @@ end)
 -- shared with tour.lua and env.lua
 -- -------------------------------------------------------------------------------------------
 NC = { toWorld = toWorld, toCity = toCity, say = say, track = track, clamp = clamp, isShown = function() return S.shown end,
-       hold = function() return S.hold end, onHide = nil, env = NC_ENV }
+       hold = function() return S.hold end, onShow = nil, onHide = nil, env = NC_ENV }
 
 addEventHandler("onClientResourceStart", resourceRoot, function()
     triggerServerEvent("nc:request", resourceRoot)
