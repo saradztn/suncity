@@ -72,27 +72,38 @@ float hash21(float2 p)
     return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
 }
 
-// smooth procedural value noise - the clouds are COMPUTED here, never sampled from a texture
-// (the old rainbow noise texture showed up raw whenever the binding broke and as giant colour
-// blobs whenever the sampling scale collapsed: a definitive fix removes the texture entirely)
-float vnoise(float2 p)
+// gradient (Perlin-style) noise: smooth rolling billows like the classic noise sheets, without the
+// square-grid waviness of plain value noise and without any texture to load, bind or magnify
+float2 grad2(float2 i)
+{
+    float a = hash21(i) * 6.2831853;
+    return float2(cos(a), sin(a));
+}
+
+float pnoise(float2 p)
 {
     float2 i = floor(p);
     float2 f = frac(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash21(i);
-    float b = hash21(i + float2(1.0, 0.0));
-    float c = hash21(i + float2(0.0, 1.0));
-    float d = hash21(i + float2(1.0, 1.0));
-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+    float2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);          // quintic fade
+    float n = lerp(lerp(dot(grad2(i), f),
+                        dot(grad2(i + float2(1.0, 0.0)), f - float2(1.0, 0.0)), u.x),
+                   lerp(dot(grad2(i + float2(0.0, 1.0)), f - float2(0.0, 1.0)),
+                        dot(grad2(i + float2(1.0, 1.0)), f - float2(1.0, 1.0)), u.x), u.y);
+    return 0.5 + 0.72 * n;
 }
 
-// fbm: broad billows, medium structure, fine wisps
+float2 rot45(float2 p)
+{
+    return float2(p.x * 0.7071 + p.y * 0.7071, p.y * 0.7071 - p.x * 0.7071);
+}
+
+// fbm: broad billows, medium structure, fine detail - each octave on a rotated domain so the
+// octaves never beat into a visible grid pattern
 float fbm3(float2 p)
 {
-    float f = vnoise(p * 0.35) * 0.55;
-    f += vnoise(p * 0.75 + 11.7) * 0.28;
-    f += vnoise(p * 1.6 + 23.1) * 0.17;
+    float f = pnoise(p * 0.32) * 0.58;
+    f += pnoise(rot45(p) * 0.63 + 11.7) * 0.27;
+    f += pnoise(p * 1.21 + 23.1) * 0.15;
     return f;
 }
 
@@ -101,7 +112,7 @@ float fbm4(float2 p)
     float f = fbm3(p);
     if (gQuality >= 2.5)
     {
-        f += vnoise(p * 3.3 + 5.9) * 0.10;
+        f += pnoise(rot45(p) * 2.4 + 5.9) * 0.09;
     }
     return f;
 }

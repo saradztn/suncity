@@ -42,9 +42,9 @@ local KEYS = {
     { h = 4.6, name = "pre-dawn", zen = { 0.030, 0.045, 0.095 }, hor = { 0.16, 0.13, 0.21 }, sun = { 0.55, 0.55, 0.75 }, sunI = 0.02,
       amb = { 0.035, 0.04, 0.055 }, nightKeep = 1.0, nightGlow = 1.0, exposure = 1.18, mie = 0.35, haze = 0.55, water = { 0.035, 0.075, 0.10 } },
     { h = 5.5, name = "dawn", zen = { 0.075, 0.11, 0.20 }, hor = { 0.52, 0.28, 0.22 }, sun = { 1.0, 0.52, 0.28 }, sunI = 0.22,
-      amb = { 0.10, 0.085, 0.10 }, nightKeep = 0.85, nightGlow = 0.85, exposure = 1.12, mie = 0.85, haze = 0.60, water = { 0.10, 0.09, 0.11 } },
+      amb = { 0.10, 0.085, 0.10 }, nightKeep = 0.85, nightGlow = 0.85, exposure = 1.05, mie = 0.85, haze = 0.60, water = { 0.10, 0.09, 0.11 } },
     { h = 6.6, name = "sunrise", zen = { 0.16, 0.28, 0.48 }, hor = { 0.85, 0.52, 0.32 }, sun = { 1.0, 0.68, 0.38 }, sunI = 0.55,
-      amb = { 0.19, 0.185, 0.21 }, nightKeep = 0.55, nightGlow = 0.45, exposure = 1.05, mie = 0.95, haze = 0.55, water = { 0.14, 0.15, 0.18 } },
+      amb = { 0.19, 0.185, 0.21 }, nightKeep = 0.55, nightGlow = 0.45, exposure = 0.98, mie = 0.95, haze = 0.55, water = { 0.14, 0.15, 0.18 } },
     { h = 8.5, name = "morning", zen = { 0.22, 0.40, 0.72 }, hor = { 0.62, 0.66, 0.72 }, sun = { 1.0, 0.94, 0.82 }, sunI = 0.92,
       amb = { 0.30, 0.33, 0.38 }, nightKeep = 0.30, nightGlow = 0.10, exposure = 1.0, mie = 0.55, haze = 0.42, water = { 0.09, 0.15, 0.20 } },
     { h = 12.5, name = "noon", zen = { 0.25, 0.45, 0.82 }, hor = { 0.68, 0.74, 0.80 }, sun = { 1.0, 0.98, 0.92 }, sunI = 1.12,
@@ -69,8 +69,8 @@ local KEYS = {
 -- sun-ray strength multiplier.
 -- ---------------------------------------------------------------------------------------
 local WEATHERS = {
-    clear = { cover = 0.12, rain = 0.0, wetT = 0.0, fog = 850, far = 2400, dim = 1.04, wind = 3.0, rays = 1.0, flash = 0.0, cloudDark = 0.95, wx = 0 },
-    fair = { cover = 0.35, rain = 0.0, wetT = 0.0, fog = 720, far = 2100, dim = 1.0, wind = 4.0, rays = 0.85, flash = 0.0, cloudDark = 0.88, wx = 1 },
+    clear = { cover = 0.12, rain = 0.0, wetT = 0.0, fog = 850, far = 2400, dim = 0.97, wind = 3.0, rays = 1.0, flash = 0.0, cloudDark = 0.95, wx = 0 },
+    fair = { cover = 0.35, rain = 0.0, wetT = 0.0, fog = 720, far = 2100, dim = 0.95, wind = 4.0, rays = 0.85, flash = 0.0, cloudDark = 0.88, wx = 1 },
     cloudy = { cover = 0.65, rain = 0.0, wetT = 0.0, fog = 620, far = 1900, dim = 0.92, wind = 5.5, rays = 0.55, flash = 0.0, cloudDark = 0.72, wx = 2 },
     overcast = { cover = 0.92, rain = 0.0, wetT = 0.05, fog = 520, far = 1600, dim = 0.78, wind = 6.0, rays = 0.22, flash = 0.0, cloudDark = 0.52, wx = 3 },
     lightrain = { cover = 0.85, rain = 0.35, wetT = 0.55, fog = 480, far = 1500, dim = 0.72, wind = 7.0, rays = 0.1, flash = 0.0, cloudDark = 0.45, wx = 8 },

@@ -70,7 +70,7 @@ on_disk |= {f for f in os.listdir(RES) if f.endswith('.fx')}
 check(on_disk == set(mfiles), 'meta.xml lists exactly the files on disk (%d files)' % len(mfiles))
 check(('client.lua', 'client') in scripts and ('server.lua', 'server') in scripts and ('tour.lua', 'client') in scripts, 'client, tour and server scripts declared')
 order = [s for s, t in scripts if t == 'client']
-check(order.index('models.lua') < order.index('layout.lua') < order.index('sprites.lua') < order.index('client.lua') < order.index('tour.lua'), 'client script order: data before logic, tour after client')
+check(order.index('models.lua') < order.index('layout.lua') < order.index('sprites.lua') < order.index('env.lua') < order.index('client.lua') < order.index('tour.lua'), 'client script order: data before logic, env before its users, tour after client')
 check(meta.find('min_mta_version') is not None and meta.find('min_mta_version').get('client'), 'min_mta_version (client) declared')
 check(meta.find('info').get('name') == 'NightCity', 'resource info present')
 
