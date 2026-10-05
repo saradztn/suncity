@@ -58,7 +58,7 @@ float3 gradeColor(float3 c, float2 uv)
     b *= 0.25;
     c += max(b - 0.36, 0.0) * 0.95;
     float l = dot(c, float3(0.299, 0.587, 0.114));
-    c = lerp(float3(l, l, l), c, 1.18);
+    c = lerp(float3(l, l, l), c, 1.50);          // saturation 150%
     c = lerp(c, c * c * (3.0 - 2.0 * c), 0.45);
     c *= lerp(float3(0.86, 1.0, 1.12), float3(1.10, 0.98, 1.04), saturate(l * 1.6));
     return c;
@@ -72,7 +72,7 @@ float3 gradeColorLite(float3 c, float2 uv)
     float3 b = (tex2D(S0, uv + w).rgb + tex2D(S0, uv - w).rgb) * 0.5;
     c += b * b * 0.85;
     float l = dot(c, float3(0.299, 0.587, 0.114));
-    c = lerp(float3(l, l, l), c, 1.18);
+    c = lerp(float3(l, l, l), c, 1.50);          // saturation 150%
     c *= lerp(float3(0.86, 1.0, 1.12), float3(1.10, 0.98, 1.04), saturate(l * 1.6));
     return c;
 }
