@@ -550,9 +550,239 @@ def plaza_gate(w, h, seed):
 
 
 # registry used by the plan / builder
+
+# ------------------------------------------------------------------------------------------
+# district landmarks and low-rise archetypes (2026 expansion)
+# ------------------------------------------------------------------------------------------
+def stadium(w=170.0, d=140.0, seed=1):
+    """bowl arena: raked stand ring, open pitch, floodlight masts, glowing rim"""
+    M, C = Mesh(), Col()
+    rng = np.random.default_rng(seed)
+    n = 26
+    r_out = min(w, d) * 0.5
+    r_in = r_out * 0.62
+    ang = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    outer = [(np.cos(a) * r_out, np.sin(a) * r_out * (d / w)) for a in ang]
+    inner = [(np.cos(a) * r_in, np.sin(a) * r_in * (d / w)) for a in ang]
+    for k in range(n):
+        k2 = (k + 1) % n
+        # stand rake (under-slab + walking surface)
+        P = [(inner[k][0], inner[k][1], 2.0), (outer[k][0], outer[k][1], 16.8),
+             (outer[k2][0], outer[k2][1], 16.8), (inner[k2][0], inner[k2][1], 2.0)]
+        M.quad(P[0], P[1], P[2], P[3], 'nc_concrete', tile=(6.0, 8.0))
+        P2 = [(P[0][0] * 0.985, P[0][1] * 0.985, 2.2), (P[1][0], P[1][1], 17.0), (P[2][0], P[2][1], 17.0), (P[3][0] * 0.985, P[3][1] * 0.985, 2.2)]
+        M.quad(P2[0], P2[1], P2[2], P2[3], 'nc_sidewalk', tile=(4.0, 7.0))
+    # outer shell
+    for k in range(n):
+        k2 = (k + 1) % n
+        M.wall((outer[k][0], outer[k][1]), (outer[k2][0], outer[k2][1]), 0, 17.5, 'nc_concrete', tile=(6.0, 5.0))
+    M.poly([(p[0], p[1], 0.02) for p in inner], 'nc_grass', tile=(8.0, 8.0))
+    # glowing rim + light masts
+    for k in range(n):
+        k2 = (k + 1) % n
+        P = [(outer[k][0], outer[k][1], 17.5), (outer[k2][0], outer[k2][1], 17.5),
+             (outer[k2][0] * 0.96, outer[k2][1] * 0.96, 18.4), (outer[k][0] * 0.96, outer[k][1] * 0.96, 18.4)]
+        M.quad(P[0], P[1], P[2], P[3], 'nc_strip_cyan', tile=(4.0, 0.6), emis=1.2)
+    for k in range(4):
+        a = np.pi / 4 + k * np.pi / 2
+        cx, cy = np.cos(a) * r_out * 0.92, np.sin(a) * r_out * (d / w) * 0.92
+        M.merge(flood_mast(), (cx, cy, 0.0))
+    C.poly_slab(outer, 0, 18.0)
+    C.poly_slab(inner, 0, 2.4)
+    return M, C, _meta('landmark', w, d, 19.0, 0, dist=2600.0)
+
+
+def flood_mast():
+    from . import parts as PP
+    return PP.floodlight_mast(26.0)
+
+
+def station_hall(w=120.0, d=64.0, seed=2):
+    """central rail terminus: long shed with an arched glazed roof, clock, arcades"""
+    M, C = Mesh(), Col()
+    rng = np.random.default_rng(seed)
+    # main hall
+    M.extrude(rect(w, d), 0, 22.0, 'nc_concrete', 'nc_concrete_dark', tile=(8.0, 6.0), smooth=False)
+    # barrel roof
+    n = 12
+    for k in range(n):
+        x0 = -w / 2 + w * k / n
+        x1 = -w / 2 + w * (k + 1) / n
+        for s in np.linspace(-1, 1, 7)[:-1]:
+            s2 = s + 2.0 / 6
+            r0 = np.sqrt(max(0.0, 1 - s * s)) * 9.0 + 22.0
+            r1 = np.sqrt(max(0.0, 1 - s2 * s2)) * 9.0 + 22.0
+            P = [(x0, s * d / 2, r0), (x0, s2 * d / 2, r1), (x1, s2 * d / 2, r1), (x1, s * d / 2, r0)]
+            M.quad(P[0], P[1], P[2], P[3], 'nc_glass_d' if k % 2 else 'nc_metal_light', tile=(4.0, 3.0), emis=0.10)
+    # glazed front + clock + arcade
+    for i in range(7):
+        xa = -w / 2 + 8 + i * (w - 16) / 6
+        M.box((xa - 2.6, -d / 2 - 0.35, 2.2), (xa + 2.6, -d / 2 + 0.1, 15.5), 'nc_glass_a', tile=(2.2, 4.0), emis=0.55)
+    M.cyl((0, -d / 2 - 0.5), 3.2, 16.5, 22.5, 12, 'nc_metal_light', tile=(2.0, 1.4), emis=0.25)
+    K.wall_sign(M, (-w / 2 + 6, -d / 2 - 0.28), (w / 2 - 6, -d / 2 - 0.28), 3.5, 'led', 2, w * 0.55, 2.4, along=0.5)
+    M.box((-w / 2, -d / 2 - 1.2, 21.0), (w / 2, -d / 2 + 1.2, 21.7), 'nc_strip_cyan', tile=(6.0, 0.4), emis=0.9)
+    C.box((-w / 2, -d / 2, 0), (w / 2, d / 2, 22.0))
+    return M, C, _meta('landmark', w, d, 31.0, 0, dist=1800.0)
+
+
+def lighthouse(seed=3):
+    """bay head lighthouse"""
+    M, C = Mesh(), Col()
+    M.cyl((0, 0), 7.5, 0, 2.2, 12, 'nc_concrete', tile=(4.0, 1.2), top_mat='nc_concrete_dark')
+    M.cone((0, 0), 3.6, 2.4, 2.2, 21.0, 12, 'nc_concrete', tile=(3.0, 5.0))
+    M.cyl((0, 0), 2.75, 21.0, 22.2, 12, 'nc_metal_dark', tile=(2.4, 0.5))
+    M.cyl((0, 0), 2.35, 22.2, 25.2, 12, 'nc_glass_c', tile=(2.4, 1.2), emis=1.25)
+    M.cone((0, 0), 2.9, 0.12, 25.2, 28.2, 12, 'nc_metal_rust', tile=(2.4, 1.2))
+    M.light((0, 0, 23.8), (1.0, 0.85, 0.6), i=2.4, r=42.0)
+    C.poly_slab([(np.cos(a) * 3.6, np.sin(a) * 3.6) for a in np.linspace(0, 2 * np.pi, 8, endpoint=False)], 0, 28.0)
+    return M, C, _meta('landmark', 15, 15, 28.2, 0, dist=3200.0)
+
+
+def villa(w=18.0, d=14.0, seed=4, pool=True):
+    """hillside luxury house: two white boxes, terrace, pool"""
+    M, C = Mesh(), Col()
+    rng = np.random.default_rng(seed)
+    h1 = float(rng.uniform(3.2, 3.8))
+    M.extrude(rect(w, d), 0, h1, 'nc_concrete', 'nc_concrete', tile=(3.4, 2.6), smooth=False)
+    M.extrude(rect(w * 0.55, d * 0.8, cx=-w * 0.12, cy=d * 0.08), h1, h1 + 3.1, 'nc_glass_b', 'nc_concrete', tile=(3.0, 2.4), smooth=False)
+    M.box((-w / 2 - 0.8, -d / 2 - 0.8, h1 + 3.1), (w * 0.1, d / 2 + 0.8, h1 + 3.45), 'nc_concrete', tile=(3.0, 0.4))
+    for i in range(5):
+        xa = -w / 2 + 1.6 + i * (w - 3.2) / 4
+        M.box((xa - 0.85, -d / 2 - 0.06, 0.9), (xa + 0.85, -d / 2 + 0.06, h1 - 0.5), 'nc_glass_a', tile=(1.2, 1.6), emis=0.75)
+    if pool:
+        M.box((w * 0.18, -d * 0.18, 0.02), (w * 0.48, d * 0.30, 0.30), 'nc_sidewalk', tile=(1.6, 0.4))
+        M.box((w * 0.21, -d * 0.13, 0.05), (w * 0.45, d * 0.25, 0.33), 'nc_glass_d', tile=(1.4, 1.0), emis=0.35)
+    C.box((-w / 2, -d / 2, -0.5), (w / 2, d / 2, h1 + 3.3))
+    return M, C, _meta('house', w + 4, d + 4, h1 + 3.6, 2, dist=900.0)
+
+
+def rowhouse(w=22.0, d=11.0, seed=5, floors=3):
+    """old-town row: one stair of pastel houses with shops on the ground floor"""
+    M, C = Mesh(), Col()
+    rng = np.random.default_rng(seed)
+    cols = ['nc_wall_tenement_a', 'nc_wall_tenement_b', 'nc_wall_brutal', 'nc_concrete']
+    k = 0
+    x = -w / 2
+    while x < w / 2 - 2:
+        bw = float(rng.uniform(5.2, 7.6))
+        bw = min(bw, w / 2 - x)
+        hh = 3.1 * floors + float(rng.uniform(-0.5, 1.4))
+        M.extrude(rect(bw - 0.15, d, cx=x + bw / 2), 0, hh, cols[k % 4], cols[k % 4], tile=(2.4, 2.8), smooth=False)
+        # shopfront + windows + cornice
+        M.box((x + 0.4, -d / 2 - 0.07, 0.35), (x + bw - 0.55, -d / 2 + 0.07, 2.8), 'nc_shop_retail', tile=(1.8, 1.2), emis=0.85)
+        for f in range(1, floors):
+            for wx in np.linspace(x + 1.0, x + bw - 1.6, 2):
+                M.box((wx - 0.55, -d / 2 - 0.06, 0.4 + f * 3.1), (wx + 0.55, -d / 2 + 0.06, 0.4 + f * 3.1 + 1.7), 'nc_glass_c', tile=(0.8, 1.1), emis=0.55)
+        M.box((x - 0.1, -d / 2 - 0.25, hh), (x + bw + 0.1, d / 2 + 0.25, hh + 0.42), 'nc_concrete_dark', tile=(2.0, 0.3))
+        x += bw
+        k += 1
+    C.box((-w / 2, -d / 2, -0.5), (w / 2, d / 2, 3.1 * floors + 2.2))
+    return M, C, _meta('house', w + 3, d + 3, 3.1 * floors + 2.6, floors, dist=800.0)
+
+
+def hangar(w=76.0, d=46.0, seed=6):
+    """airfield hangar: barrel shell + big door"""
+    M, C = Mesh(), Col()
+    n = 10
+    for k in range(n):
+        x0 = -w / 2 + w * k / n
+        x1 = -w / 2 + w * (k + 1) / n
+        for s in np.linspace(-1, 1, 7)[:-1]:
+            s2 = s + 2.0 / 6
+            r0 = np.sqrt(max(0.0, 1 - s * s)) * 11.0 + 6.0
+            r1 = np.sqrt(max(0.0, 1 - s2 * s2)) * 11.0 + 6.0
+            P = [(x0, s * d / 2, r0), (x0, s2 * d / 2, r1), (x1, s2 * d / 2, r1), (x1, s * d / 2, r0)]
+            M.quad(P[0], P[1], P[2], P[3], 'nc_wall_corrug', tile=(5.0, 3.0))
+    for sx in (-1, 1):
+        M.box((sx * w / 2 - 1.2, -d / 2, 0), (sx * w / 2 + 1.2, d / 2, 17.0), 'nc_wall_corrug', tile=(4.0, 4.0))
+    M.box((-w / 2 - 1.2, -d / 2 - 0.5, 0), (-w / 2 + 9.0, -d / 2 + 0.5, 12.5), 'nc_metal_dark', tile=(3.2, 3.2))
+    M.box((-w / 2 - 1.4, -d / 2 - 0.7, 12.5), (-w / 2 + 9.2, -d / 2 + 0.7, 13.1), 'nc_strip_white', tile=(3.0, 0.35), emis=0.8)
+    C.box((-w / 2, -d / 2, 0), (w / 2, d / 2, 17.0))
+    return M, C, _meta('ind', w + 4, d + 4, 18.5, 0, dist=1600.0)
+
+
+def pier(L=150.0, w=16.0, seed=7):
+    """harbour pier deck on piles with bollards and lamps"""
+    M, C = Mesh(), Col()
+    M.box((-L / 2, -w / 2, 0.9), (L / 2, w / 2, 1.6), 'nc_deck_under', tile=(6.0, 3.0))
+    M.hquad(-L / 2, -w / 2, L / 2, w / 2, 1.62, 'nc_asphalt', tile=(8.0, 8.0))
+    for x in np.linspace(-L / 2 + 6, L / 2 - 6, int(L / 12)):
+        for s in (-1, 1):
+            M.cyl((x, s * (w / 2 - 1.2)), 0.75, -3.2, 1.05, 8, 'nc_concrete_dark', tile=(1.6, 2.0))
+            M.merge(bollard(), (x + 3.0, s * (w / 2 - 0.7), 1.62))
+    for x in np.linspace(-L / 2 + 10, L / 2 - 10, max(2, int(L / 30))):
+        M.merge(lamp9(), (x, -w / 2 + 1.0, 1.62), rz=0.0)
+    C.box((-L / 2, -w / 2, 0.8), (L / 2, w / 2, 1.62))
+    return M, C, _meta('infra', L, w + 6, 2.2, 0, dist=1500.0)
+
+
+def bollard():
+    from . import parts as PP
+    return PP.bollard()
+
+
+def lamp9():
+    from . import parts as PP
+    return PP.street_lamp(9.0, 2.4, True, False)
+
+
+def park_patch(w=64.0, d=52.0, seed=8):
+    """city park: lawn, meandering gravel path, tree clusters, benches, pond"""
+    from . import veg
+    M, C = Mesh(), Col()
+    rng = np.random.default_rng(seed)
+    M.hquad(-w / 2, -d / 2, w / 2, d / 2, 0.06, 'nc_grass', tile=(6.0, 6.0))
+    # gravel path (a soft S through the park)
+    t = np.linspace(-1, 1, 9)
+    path = [(w * 0.42 * tt, d * 0.30 * np.sin(tt * 2.2), 0.09) for tt in t]
+    M.ribbon(path, 1.7, 'nc_dirt', tile_v=4.0, u=(0.0, 1.0))
+    # pond
+    if w > 50:
+        M.cyl((w * 0.22, -d * 0.22), min(w, d) * 0.16, 0.02, 0.12, 10, 'nc_concrete', tile=(2.0, 0.3), top_mat='nc_glass_d')
+    n = int(w * d / 260.0)
+    for k in range(n):
+        tx = float(rng.uniform(-w / 2 + 3, w / 2 - 3))
+        ty = float(rng.uniform(-d / 2 + 3, d / 2 - 3))
+        if abs(ty - d * 0.30 * np.sin(tx / w * 4.4)) < 3.5:
+            continue
+        r = float(rng.random())
+        sub = veg.broadleaf(seed=int(rng.integers(1, 9999))) if r < 0.6 else (veg.pine(seed=int(rng.integers(1, 9999))) if r < 0.85 else veg.bush(seed=int(rng.integers(1, 9999))))
+        M.merge(sub[0], (tx, ty, 0.06), rz=float(rng.uniform(0, 360)))
+    for k in range(2):
+        M.merge(_bench2(), (-w * 0.25 + k * w * 0.5, d * 0.36, 0.09), rz=float(rng.uniform(0, 360)))
+    C.box((-w / 2 + 0.15, -d / 2 + 0.15, -0.4), (w / 2 - 0.15, d / 2 - 0.15, 0.062))
+    return M, C, _meta('park', w, d, 1.2, 0, dist=900.0)
+
+
+def _bench2():
+    from . import parts as PP
+    return PP.bench()
+
+
+def runway(L=1100.0, seed=9):
+    """airport runway + taxiway strip with centreline lights"""
+    M, C = Mesh(), Col()
+    M.hquad(-L / 2, -23.0, L / 2, 23.0, 0.03, 'nc_asphalt', tile=(14.0, 14.0))
+    for x in np.linspace(-L / 2 + 30, L / 2 - 30, int(L / 45)):
+        M.hquad(x - 1.2, -0.55, x + 12.0, 0.55, 0.05, 'nc_sidewalk', tile=(3.0, 0.6))
+    for x in np.linspace(-L / 2 + 60, L / 2 - 60, int(L / 90)):
+        M.box((x - 0.35, -0.35, 0.05), (x + 0.35, 0.35, 0.16), 'nc_light_white', tile=(0.5, 0.2), emis=0.9)
+    for x in (-L / 2 + 24, L / 2 - 24):
+        for y in np.linspace(-18, 18, 7):
+            M.box((x - 0.5, y - 0.5, 0.05), (x + 0.5, y + 0.5, 0.18), 'nc_light_white', tile=(0.5, 0.2), emis=0.9)
+    # taxiway + apron
+    M.hquad(-L * 0.28, 23.0, L * 0.28, 41.0, 0.03, 'nc_asphalt', tile=(12.0, 12.0))
+    M.hquad(-L * 0.18, 41.0, L * 0.18, 96.0, 0.03, 'nc_asphalt', tile=(12.0, 12.0))
+    C.box((-L / 2, -23.0, -0.4), (L / 2, 23.0, 0.06))
+    C.box((-L * 0.28, 23.0, -0.4), (L * 0.28, 96.0, 0.06))
+    return M, C, _meta('infra', L, 130, 0.2, 0, dist=2600.0)
+
+
 ARCH = {
     'tower_setback': tower_setback, 'tower_cyl': tower_cyl, 'tower_twin': tower_twin, 'arcology': arcology,
     'midrise': midrise, 'tenement': tenement, 'slab': slab, 'megablock': megablock,
     'warehouse': warehouse, 'factory': factory, 'tank_farm': tank_farm, 'container_yard': container_yard, 'garage': garage,
     'plaza_gate': plaza_gate,
+    'stadium': stadium, 'station_hall': station_hall, 'lighthouse': lighthouse, 'villa': villa,
+    'rowhouse': rowhouse, 'hangar': hangar, 'pier': pier, 'park_patch': park_patch, 'runway': runway,
 }

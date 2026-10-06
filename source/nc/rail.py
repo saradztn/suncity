@@ -310,3 +310,165 @@ def rail_signal():
     M.box((-0.55, -0.55, -0.02), (0.55, 0.55, 0.25), CON, tile=(0.6, 0.4))
     C.box((-0.3, -0.3, 0.0), (0.3, 0.3, 5.6))
     return M, C, dict(kind='rail', dist=1200.0, amb=1.0)
+
+
+# -------------------------------------------------------------------------------------------
+# polyline guideway segments (the loop is no longer a rectangle: chains of these follow a spline)
+# -------------------------------------------------------------------------------------------
+from .roads import _arc_pts, _norm2      # noqa: E402  (shared centre-line helpers)
+
+
+def rail_seg(L=24.0, r=0.0, dz=0.0, mode='viaduct', seed=0):
+    """one guideway piece along +x (chord), bending with radius r, climbing dz.
+    mode: 'viaduct' box girder + pier, 'ground' low slab + fence, 'tube' lit tunnel shell.
+    The origin sits ON THE RAIL TOP of the piece centre."""
+    M, C = Mesh(), Col()
+    n = max(4, int(L / 6.0) + 1)
+    pts = _arc_pts(L, r, n, dz)
+    nor = _norm2(pts)
+    path = [tuple(p) for p in pts]
+
+    def edge(s, off):
+        return [tuple(pts[i] + np.array([nor[i, 0] * s * off, nor[i, 1] * s * off, 0.0])) for i in range(n)]
+
+    if mode == 'tube':
+        # arch shell: profile swept along the curved path
+        prof = _tunnel_profile(5.8, 1.9, -1.25)
+        K = len(prof)
+        for i in range(n - 1):
+            for k in range(K - 1):
+                (ya, za), (yb, zb) = prof[k], prof[k + 1]
+                a0 = pts[i] + np.array([nor[i, 0] * ya, nor[i, 1] * ya, za])
+                a1 = pts[i] + np.array([nor[i, 0] * yb, nor[i, 1] * yb, zb])
+                b1 = pts[i + 1] + np.array([nor[i + 1, 0] * yb, nor[i + 1, 1] * yb, zb])
+                b0 = pts[i + 1] + np.array([nor[i + 1, 0] * ya, nor[i + 1, 1] * ya, za])
+                M.quad(a0, a1, b1, b0, CON, tile=(3.0, 2.2))
+        # wall light strips + centre band + walkways + floor
+        for s in (-1, 1):
+            M.ribbon(edge(s, 5.72), 0.10, WARM, tile_v=1.2, u=(0.0, 1.0), zoff=0.55, emis=1.05)
+            M.ribbon(edge(s, 4.85), 0.85, MAT, tile_v=1.2, u=(0.0, 1.0), zoff=-0.85)
+            M.ribbon(edge(s, 4.05), 0.12, MAT2, tile_v=0.6, u=(0.0, 1.0), zoff=-0.85, emis=0.04)
+            C.poly_slab([(p[0], p[1]) for p in edge(s, 5.55)] + [(p[0], p[1]) for p in edge(s, 6.15)][::-1], -1.3, 2.1)
+        M.ribbon(path, 1.15, WARM, tile_v=1.0, u=(0.0, 1.0), zoff=7.5, emis=0.95)
+        M.ribbon(path, 5.8, MAT, tile_v=3.0, u=(0.0, 1.0), zoff=-1.26)
+        C.poly_slab([(p[0], p[1]) for p in edge(-1, 5.8)] + [(p[0], p[1]) for p in edge(1, 5.8)][::-1], 6.6, 7.9)
+        return M, C, dict(kind='rail', dist=1500.0, amb=1.0)
+
+    if mode == 'ground':
+        # at-grade: low track slab, cable ducts, chain fence on both sides
+        M.ribbon(path, 4.1, MAT, tile_v=3.0, u=(0.0, 1.0), zoff=-0.16)
+        for s in (-1, 1):
+            M.ribbon(edge(s, 1.10), 0.07, MAT2, tile_v=0.25, u=(0.0, 1.0), zoff=0.05, emis=0.03)
+            M.ribbon(edge(s, 4.25), 0.30, CON, tile_v=1.0, u=(0.0, 1.0), zoff=-0.06)
+            for i in range(n):
+                p = pts[i] + np.array([nor[i, 0] * s * 4.55, nor[i, 1] * s * 4.55, 0.0])
+                M.box((p[0] - 0.05, p[1] - 0.05, -0.1), (p[0] + 0.05, p[1] + 0.05, 1.25), MAT, tile=(0.2, 0.5))
+            M.box((float(pts[0, 0] + nor[0, 0] * s * 4.55) - 0.02, float(pts[0, 1] + nor[0, 1] * s * 4.55) - 0.02, 1.18),
+                  (float(pts[-1, 0] + nor[-1, 0] * s * 4.55) + 0.02, float(pts[-1, 1] + nor[-1, 1] * s * 4.55) + 0.02, 1.30),
+                  MAT, tile=(2.0, 0.14))
+        C.poly_slab([(p[0], p[1]) for p in edge(-1, 4.1)] + [(p[0], p[1]) for p in edge(1, 4.1)][::-1], -1.9, -0.12)
+        return M, C, dict(kind='rail', dist=1500.0, amb=1.0)
+
+    # ---- viaduct: the box-girder profile, ribbon-built along the arc
+    M.ribbon(path, DECK_HW, MAT, tile_v=3.0, u=(0.0, 1.0), zoff=DECK_TOP - 0.15)
+    for s in (-1, 1):
+        M.ribbon(edge(s, 1.10), 0.07, MAT2, tile_v=0.25, u=(0.0, 1.0), zoff=0.04, emis=0.03)
+    M.ribbon(path, DECK_HW, CON, tile_v=1.4, u=(0.0, 1.0), zoff=-1.85)
+    M.ribbon(path, 2.65, CON, tile_v=1.4, u=(0.0, 1.0), zoff=GIRD_B + 0.65)
+    for s in (-1, 1):
+        M.ribbon(edge(s, 3.7), 0.55, CON, tile_v=1.0, u=(0.0, 1.0), zoff=0.25)
+        M.ribbon(edge(s, 3.97), 0.06, RED, tile_v=0.2, u=(0.0, 1.0), zoff=0.45, emis=0.12)
+        M.ribbon(edge(s, 3.72), 0.055, RED, tile_v=0.16, u=(0.0, 1.0), zoff=1.47, emis=0.10)
+        for i in range(n):
+            p = pts[i] + np.array([nor[i, 0] * s * 3.72, nor[i, 1] * s * 3.72, 0.0])
+            M.box((p[0] - 0.045, p[1] - 0.045, 0.85), (p[0] + 0.045, p[1] + 0.045, 1.45), MAT, tile=(0.2, 0.5))
+    # pier under the centre (skipped when the piece is short / low)
+    if float(pts[:, 2].min()) > 2.0:
+        pm = pts[n // 2]
+        M.box((pm[0] - 1.7, pm[1] - 1.7, pm[2] - 14.0), (pm[0] + 1.7, pm[1] + 1.7, pm[2] + GIRD_B), CON, tile=(2.2, 3.2))
+        M.box((pm[0] - 2.7, pm[1] - 2.7, pm[2] + GIRD_B), (pm[0] + 2.7, pm[1] + 2.7, pm[2] + GIRD_B + 0.9), CON, tile=(2.2, 0.8))
+        C.box((pm[0] - 1.9, pm[1] - 1.9, pm[2] - 14.0), (pm[0] + 1.9, pm[1] + 1.9, pm[2] + GIRD_B))
+    C.poly_slab([(p[0], p[1]) for p in edge(-1, 3.95)] + [(p[0], p[1]) for p in edge(1, 3.95)][::-1],
+                float(pts[:, 2].min()) + GIRD_B, float(pts[:, 2].max()) + DECK_TOP)
+    for s in (-1, 1):
+        C.poly_slab([(p[0], p[1]) for p in edge(s, 3.35)] + [(p[0], p[1]) for p in edge(s, 4.15)][::-1],
+                    float(pts[:, 2].max()) + DECK_TOP, float(pts[:, 2].max()) + 1.55)
+    return M, C, dict(kind='rail', dist=1700.0, amb=1.0)
+
+
+def rail_station_u(variant=0):
+    """UNDERGROUND station: tiled platform box, ceiling light band, name plates, stairs shaft"""
+    M, C = Mesh(), Col()
+    L = 84.0
+    x0, x1 = -L / 2, L / 2
+    # platform (island, 5.2 m) + track troughs
+    M.box((x0, -2.6, -0.35), (x1, 2.6, 1.02), 'nc_sidewalk', tile=(6.0, 3.0))
+    for sy in (-1.0, 1.0):
+        M.box((x0, sy * 2.6 - 0.08, 0.42), (x1, sy * 2.6 + 0.08, 1.10), CON, tile=(4.0, 0.5))
+        M.box((x0, sy * 2.72 - 0.05, 0.98), (x1, sy * 2.72 + 0.05, 1.06), RED, tile=(4.0, 0.12), emis=0.35)
+        M.box((x0, sy * 2.6, -1.35), (x1, sy * 5.8, -0.35), MAT, tile=(4.0, 1.2))
+    # hall shell
+    M.box((x0 - 1.0, -7.6, -1.4), (x1 + 1.0, 7.6, -1.28), MAT, tile=(6.0, 3.0))
+    for sy in (-1.0, 1.0):
+        M.box((x0 - 1.0, sy * 7.6 - 0.55, -1.35), (x1 + 1.0, sy * 7.6 + 0.55, 6.2), CON, tile=(4.0, 2.2))
+        M.box((x0 - 1.0, sy * 7.6 - 0.62, 2.2), (x1 + 1.0, sy * 7.6 + 0.62, 2.9), 'nc_tunnel_tile', tile=(4.0, 0.8), emis=0.10)
+    M.box((x0 - 1.0, -7.6, 5.9), (x1 + 1.0, 7.6, 6.2), CON, tile=(6.0, 2.2))
+    M.box((x0 - 1.0, -1.35, 5.72), (x1 + 1.0, 1.35, 5.86), WARM, tile=(6.0, 1.0), emis=1.15)
+    # columns + name plates + benches
+    for cx in np.linspace(x0 + 8, x1 - 8, 6):
+        for sy in (-1.0, 1.0):
+            M.box((cx - 0.55, sy * 4.4 - 0.55, -1.3), (cx + 0.55, sy * 4.4 + 0.55, 5.7), CON, tile=(1.2, 3.0))
+    for i, cx in enumerate((-22.0, 0.0, 22.0)):
+        for sy in (-1, 1):
+            _board(M, cx, sy * 4.9 - 3.2, 3.3, sy * 4.9 + 3.2, 4.6, _sign_uv(variant % 3), emis=1.35)
+            M.merge(_bench()[0], (cx + 6.0, sy * 4.2, 1.02), rz=0.0 if sy > 0 else 180.0)
+    # stairs box at the centre (up to the street)
+    M.box((-6.0, -2.2, -1.35), (6.0, 2.2, 8.0), CON, tile=(3.0, 3.0), skip=('top',))
+    M.box((-6.3, -2.5, 7.6), (6.3, 2.5, 8.0), CON, tile=(3.0, 0.6))
+    for sy in (-1.0, 1.0):
+        M.box((-6.0, sy * 2.2 - 0.1, -1.2), (6.0, sy * 2.2 + 0.1, 7.7), 'nc_tunnel_tile', tile=(3.0, 1.6), emis=0.08)
+    C.box((x0 - 1.0, -7.6, -1.4), (x1 + 1.0, 7.6, -1.28))
+    for sy in (-1.0, 1.0):
+        C.box((x0 - 1.0, sy * 7.6 - 0.55, -1.35), (x1 + 1.0, sy * 7.6 + 0.55, 6.2))
+        C.box((x0, sy * 2.6 - 0.15, -1.35), (x1, sy * 2.6 + 0.15, 1.1))
+    C.box((x0 - 1.0, -7.6, 5.9), (x1 + 1.0, 7.6, 6.3))
+    return M, C, dict(kind='rail', dist=1500.0, amb=1.0)
+
+
+def rail_station_g(variant=0):
+    """GROUND-LEVEL station: low platform, steel canopy on posts, name board, bike racks"""
+    M, C = Mesh(), Col()
+    L = 84.0
+    x0, x1 = -L / 2, L / 2
+    M.box((x0, -2.6, -0.9), (x1, 2.6, 1.02), 'nc_sidewalk', tile=(6.0, 3.0))
+    for sy in (-1.0, 1.0):
+        M.box((x0, sy * 2.6 - 0.08, 0.42), (x1, sy * 2.6 + 0.08, 1.10), CON, tile=(4.0, 0.5))
+        M.box((x0, sy * 2.72 - 0.05, 0.98), (x1, sy * 2.72 + 0.05, 1.06), RED, tile=(4.0, 0.12), emis=0.35)
+    # canopy: two hinged steel plates on slim columns
+    for sy in (-1.0, 1.0):
+        for cx in np.linspace(x0 + 5, x1 - 5, 7):
+            M.box((cx - 0.16, sy * 1.2 - 0.16, 1.02), (cx + 0.16, sy * 1.2 + 0.16, 3.9), MAT, tile=(0.4, 2.0))
+        M.box((x0, sy * 1.2 - 0.2, 3.9), (x1, sy * 1.2 + 0.2, 4.18), MAT, tile=(4.0, 0.35))
+        M.box((x0, sy * 0.15, 4.18), (x1, sy * 2.35, 4.42), 'nc_metal_light', tile=(4.0, 1.2))
+        M.box((x0, -0.55, 3.86), (x1, 0.55, 3.98), WARM, tile=(4.0, 0.6), emis=1.1)
+    for i, cx in enumerate((-22.0, 0.0, 22.0)):
+        for sy in (-1, 1):
+            _board(M, cx, sy * 2.35 - 2.6, 2.05, sy * 2.35 + 2.6, 3.15, _sign_uv(variant % 3), emis=1.3)
+            M.merge(_bench()[0], (cx + 6.5, sy * 1.85, 1.02), rz=0.0 if sy > 0 else 180.0)
+    # entry gate + shelter
+    M.box((x0 + 2.0, -2.4, 1.02), (x0 + 8.5, -1.1, 3.4), 'nc_metal_dark', tile=(2.0, 1.4))
+    M.box((x0 + 1.6, -2.7, 3.4), (x0 + 9.0, -0.8, 3.7), RED, tile=(2.0, 0.5), emis=0.2)
+    C.box((x0, -2.6, -0.9), (x1, 2.6, 1.02))
+    for sy in (-1.0, 1.0):
+        C.box((x0, sy * 2.6 - 0.15, -0.9), (x1, sy * 2.6 + 0.15, 1.1))
+    return M, C, dict(kind='rail', dist=1500.0, amb=1.0)
+
+
+def _bench():
+    """small platform bench (merged into stations)"""
+    M, C = Mesh(), Col()
+    M.box((-1.5, -0.28, 0.42), (1.5, 0.28, 0.52), MAT, tile=(1.5, 0.35))
+    M.box((-1.5, -0.28, 0.0), (1.5, -0.18, 0.42), MAT, tile=(1.5, 0.35))
+    M.box((-1.5, 0.18, 0.0), (1.5, 0.28, 0.42), MAT, tile=(1.5, 0.35))
+    M.box((-1.5, -0.22, 0.52), (1.5, -0.12, 1.05), RED, tile=(1.5, 0.5), emis=0.08)
+    return M, C, dict(kind='rail')

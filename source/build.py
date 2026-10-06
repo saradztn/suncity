@@ -89,6 +89,8 @@ def build_col(C, name, bounds, nocol=False):
     # the bounding box / sphere GTA uses to cull collision tests must contain ALL collision geometry (slabs reach below the visible mesh,
     # tunnel walls and roof beyond the visible shell): union of the visible bounds and the collision primitives
     lo_, hi_ = np.array(bounds[0], float), np.array(bounds[1], float)
+    if nocol:
+        lo_, hi_ = np.array((-0.01, -0.01, -0.02)), np.array((0.01, 0.01, 0.0))
     for b in boxes:
         lo_, hi_ = np.minimum(lo_, b[0]), np.maximum(hi_, b[1])
     if V is not None:
@@ -128,7 +130,22 @@ def main():
     glow_stats = 0
     for k, name in enumerate(names):
         M, C, meta = registry.build_model(plan, name)
-        pos, nrm, uv, tris, tmat, em, tn, mats = bake.flatten(M)
+        try:
+            pos, nrm, uv, tris, tmat, em, tn, mats = bake.flatten(M)
+        except ValueError:
+            print('EMPTY MODEL: %s %s %s' % (name, plan.models[name]['builder'], plan.models[name].get('hint')))
+            raise
+        seen, keep = set(), []
+        for i, t in enumerate(np.asarray(tris)):
+            tri = np.asarray([pos[v][:3] for v in t[:3]])
+            fk = tuple(sorted(tuple(np.round(p, 3)) for p in tri))
+            if fk not in seen:
+                seen.add(fk)
+                keep.append(i)
+        if len(keep) != len(tris):
+            print('   dropped %d duplicate faces in %s' % (len(tris) - len(keep), name))
+        tris = np.asarray(tris)[keep]
+        tmat = np.asarray(tmat)[keep]
         col = bake.bake(pos, nrm, em, tn, M.lights, amb=float(meta.get('amb', 1.0)))
         g, used = build_geometry(pos, nrm, uv, tris, tmat, col)
         mnames = [mats[i] for i in used]
@@ -210,11 +227,20 @@ def main():
     ll.append('-- the river road tunnel (x = axis, y0 / y1 = open cut mouths, cov0 / cov1 = covered part, zf = flat road level, hw = half width)')
     ll.append('NC_TUNNEL = { x = %.2f, y0 = %.2f, y1 = %.2f, cov0 = %.2f, cov1 = %.2f, zf = %.2f, hw = %.1f }' % (tg['x'], tg['y_in'], tg['y_out'], tg['y_cov0'], tg['y_cov1'], tg['z_floor'], 7.0))
     mt = plan.metro
-    ll.append('-- the Night City Metro (closed loop): y / ys = north and south straights (rail top z),')
-    ll.append('-- x0 / x1 = straight ends, r = turn radius, stops = station x list (north straight),')
-    ll.append('-- dw = dwell seconds, vx = service speed')
-    ll.append('NC_METRO = { y = %.2f, ys = %.2f, z = %.2f, x0 = %.1f, x1 = %.1f, r = %.1f, stops = { %.1f, %.1f, %.1f }, dw = 6.0, vx = 16.0 }'
-              % (mt['y'], mt['ys'], mt['z'], mt['x0'], mt['x1'], mt['r'], mt['stops'][0], mt['stops'][1], mt['stops'][2]))
+    ll.append('-- the Night City Metro: an organic closed loop as a dense polyline (path), rail-top z.')
+    ll.append('-- total = loop length in metres; stops = { {s,x,y,z,kind,name}, ... } sorted by s;')
+    ll.append('-- dw = dwell seconds at stations, vx = service speed.  The train follows the path by s.')
+    ll.append('NC_METRO = {')
+    ll.append('    total = %.2f, dw = %.1f, vx = %.1f,' % (mt['total'], mt['dw'], mt['vx']))
+    ll.append('    path = {')
+    for (px, py, pz) in mt['path']:
+        ll.append('        { %.1f, %.1f, %.1f },' % (px, py, pz))
+    ll.append('    },')
+    ll.append('    stops = {')
+    for t in mt['stops']:
+        ll.append('        { s = %.1f, x = %.1f, y = %.1f, z = %.1f, kind = "%s", name = "%s" },' % (t['s'], t['x'], t['y'], t['z'], t['kind'], t['name']))
+    ll.append('    },')
+    ll.append('}')
     surf = {}
     for txdname, mset in used_mats.items():
         for n in mset:

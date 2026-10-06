@@ -412,6 +412,22 @@ class Col:
         assert len(P) == 4
         self.prisms.append(np.array([(p[0], p[1], z0) for p in P] + [(p[0], p[1], z1) for p in P]))
 
+    def poly_slab(self, poly2d, z0, z1):
+        """prism under an arbitrary simple polygon (2n verts, quad sides)"""
+        pts = [tuple(map(float, p[:2])) for p in poly2d]
+        n = len(pts)
+        if n < 3:
+            return
+        V = [(x, y, float(z0)) for x, y in pts] + [(x, y, float(z1)) for x, y in pts]
+        F = []
+        for i in range(1, n - 1):
+            F.append((0, i + 1, i))
+            F.append((n, n + i, n + i + 1))
+        for i in range(n):
+            j = (i + 1) % n
+            F += [(i, j, n + j), (i, n + j, n + i)]
+        self.mesh(np.array(V, np.float64), F)
+
     def mesh(self, P, F, surf=0):
         P = np.asarray(P, float)
         F = np.asarray(F, np.int64)

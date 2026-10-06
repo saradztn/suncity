@@ -32,6 +32,9 @@ CONCRETE = {'nc_concrete', 'nc_concrete_dark', 'nc_pillar', 'nc_deck_under', 'nc
 METAL = {'nc_metal_dark', 'nc_metal_light', 'nc_metal_rust', 'nc_steel', 'nc_wall_metal', 'nc_wall_corrug',
          'nc_container_a', 'nc_container_b', 'nc_container_c', 'nc_tank', 'nc_ac', 'nc_vent'}
 WALL = {'nc_wall_tenement_a', 'nc_wall_tenement_b', 'nc_wall_brutal'}
+NATURE_GROUND = {'nc_sand', 'nc_grass', 'nc_dirt', 'nc_field'}          # wet like pavements
+NATURE_WALL = {'nc_bark', 'nc_leaf', 'nc_palm'}                          # barely wet
+ROCK = {'nc_rock'}
 NEON = {'nc_ads', 'nc_led', 'nc_neon_h', 'nc_neon_v', 'nc_tunnel_sign', 'nc_shop_retail', 'nc_shop_club', 'nc_shop_food'}
 
 
@@ -44,8 +47,12 @@ def surface_group(name):
         return 'neon'
     if name in GROUND:
         return 'ground'
-    if name in CONCRETE:
+    if name in CONCRETE or name in ROCK:
         return 'concrete'
+    if name in NATURE_GROUND:
+        return 'ground'
+    if name in NATURE_WALL:
+        return 'wall'
     if name in METAL:
         return 'metal'
     if name in WALL:

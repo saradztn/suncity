@@ -426,6 +426,107 @@ def tank(h, w, seed):
     return PBR(a * 0.55, r, m * 0.2, hg - 0.3 * wl)
 
 
+# ------------------------------------------------------------------ nature (terrain, coast, vegetation)
+@reg('nc_rock', 256, 256)
+def rock(h, w, seed):
+    """weathered mountain rock: fractal ridges, cracks, moss in the shade"""
+    n1 = fbm(h, w, seed + 1200, 2.6)
+    n2 = fbm(h, w, seed + 1201, 6.0)
+    ridg = 1.0 - np.abs(fbm(h, w, seed + 1202, 3.4))
+    g = grain(h, w, seed + 1203, 0.8)
+    base = 0.30 + 0.17 * n1 + 0.10 * ridg + 0.04 * g
+    alb = base[..., None] * rgb(1.02, 0.99, 0.93)
+    moss = smooth(0.55, 1.4, n2) * 0.35
+    alb = lerp(alb, rgb(0.22, 0.30, 0.16), moss[..., None])
+    crack = smooth(1.15, 1.9, n2) * 0.5
+    alb = alb * (1.0 - 0.45 * crack[..., None])
+    return PBR(alb, 0.85 - 0.15 * ridg, None, 0.7 * ridg + 0.25 * n1)
+
+
+@reg('nc_sand', 256, 256)
+def sand(h, w, seed):
+    """beach sand: fine grain, gentle wind ripples, wet near the tide line"""
+    rip = np.sin(coords(h, w)[1] * 14.0 * np.pi + 2.2 * fbm(h, w, seed + 1210, 1.6))
+    g = grain(h, w, seed + 1211, 0.35)
+    n = fbm(h, w, seed + 1212, 1.8)
+    base = 0.58 + 0.10 * rip + 0.05 * g + 0.06 * n
+    alb = base[..., None] * rgb(1.06, 0.98, 0.82)
+    return PBR(alb, 0.9 - 0.12 * (0.5 + 0.5 * rip), None, 0.22 * (0.5 + 0.5 * rip) + 0.1 * g)
+
+
+@reg('nc_grass', 256, 256)
+def grass(h, w, seed):
+    """dry mediterranean grass with soil patches"""
+    n1 = fbm(h, w, seed + 1220, 2.4)
+    n2 = fbm(h, w, seed + 1221, 7.0)
+    g = grain(h, w, seed + 1222, 0.5)
+    base = 0.30 + 0.12 * n1 + 0.05 * g
+    alb = base[..., None] * rgb(0.72, 1.05, 0.48)
+    soil = smooth(0.5, 1.3, n2) * 0.55
+    alb = lerp(alb, rgb(0.42, 0.32, 0.20), soil[..., None])
+    return PBR(alb, 0.92, None, 0.25 * n1 + 0.1 * g)
+
+
+@reg('nc_dirt', 256, 256)
+def dirt(h, w, seed):
+    """mountain paths, construction ground, park soil"""
+    n1 = fbm(h, w, seed + 1230, 2.2)
+    n2 = fbm(h, w, seed + 1231, 5.5)
+    g = grain(h, w, seed + 1232, 0.6)
+    base = 0.34 + 0.12 * n1 + 0.05 * g
+    alb = base[..., None] * rgb(1.02, 0.88, 0.70)
+    alb = lerp(alb, rgb(0.28, 0.22, 0.16), smooth(0.6, 1.5, n2)[..., None] * 0.5)
+    return PBR(alb, 0.9, None, 0.35 * n1)
+
+
+@reg('nc_field', 256, 256)
+def field(h, w, seed):
+    """outskirts farm field: plough furrows + crop bands"""
+    X, Y = coords(h, w)
+    fur = np.sin(Y * 22.0 * np.pi)
+    n = fbm(h, w, seed + 1240, 2.0)
+    g = grain(h, w, seed + 1241, 0.5)
+    base = 0.32 + 0.08 * fur + 0.07 * n + 0.03 * g
+    alb = base[..., None] * rgb(0.85, 1.0, 0.55)
+    alb = lerp(alb, rgb(0.55, 0.45, 0.25), (0.5 + 0.5 * np.sin(X * 6.0 * np.pi))[..., None] * 0.35)
+    return PBR(alb, 0.9, None, 0.3 * (0.5 + 0.5 * fur))
+
+
+@reg('nc_bark', 128, 128)
+def bark(h, w, seed):
+    """tree bark: vertical fissures"""
+    n1 = fbm(h, w, seed + 1250, 3.0)
+    X, Y = coords(h, w)
+    fis = np.abs(np.sin((X * 9.0 + 1.6 * n1) * np.pi))
+    base = 0.22 + 0.14 * fis + 0.06 * n1
+    alb = base[..., None] * rgb(1.05, 0.92, 0.78)
+    return PBR(alb, 0.9, None, 0.55 * fis + 0.15 * n1)
+
+
+@reg('nc_leaf', 128, 128)
+def leaf(h, w, seed):
+    """dense foliage clump (canopy shell texture)"""
+    n1 = fbm(h, w, seed + 1260, 2.8)
+    n2 = fbm(h, w, seed + 1261, 6.5)
+    g = grain(h, w, seed + 1262, 0.7)
+    base = 0.26 + 0.13 * n1 + 0.06 * n2 + 0.03 * g
+    alb = base[..., None] * rgb(0.55, 1.15, 0.42)
+    alb = lerp(alb, rgb(0.22, 0.45, 0.16), smooth(0.55, 1.35, n2)[..., None] * 0.6)
+    return PBR(alb, 0.85, None, 0.35 * n1)
+
+
+@reg('nc_palm', 128, 128)
+def palm(h, w, seed):
+    """palm frond texture (fan segments)"""
+    X, Y = coords(h, w)
+    fan = np.abs(np.sin(X * 7.0 * np.pi + 1.2 * Y * np.pi))
+    n = fbm(h, w, seed + 1270, 3.0)
+    base = 0.30 + 0.12 * fan + 0.05 * n
+    alb = base[..., None] * rgb(0.52, 1.12, 0.42)
+    alb = alb * (1.0 - 0.35 * smooth(0.75, 1.0, np.abs(fan - 0.15) / 0.85)[..., None])
+    return PBR(alb, 0.8, None, 0.4 * fan)
+
+
 @reg('nc_sky_dome', 8, 8)
 def sky_dome(h, w, seed):
     """flat hook texture for the sky dome model (skydome.py).  The dome colour is 100% shader:

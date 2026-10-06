@@ -16,4 +16,17 @@ def build_model(plan, name):
         return getattr(tunnel, b)(**a)
     if b.startswith('rail_') or b in ('metro', 'metro_door'):
         return getattr(rail, b)(**a)
-    return getattr(infra, b)(**a)
+    if b == 'terrain_tile':
+        from . import terrain as T
+        return T.tile(**a)
+    if b in ('far_ring', 'sea_floor'):
+        from . import terrain as T
+        return getattr(T, b)(**a)
+    from . import roads, terrain
+    if hasattr(infra, b):
+        return getattr(infra, b)(**a)
+    if hasattr(roads, b):
+        return getattr(roads, b)(**a)
+    if hasattr(terrain, b):
+        return getattr(terrain, b)(**a)
+    raise AttributeError('no builder for %r' % b)

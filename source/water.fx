@@ -1,10 +1,12 @@
 // Created by: Arena.ai Agent Mode (AI) - NightCity MTA:SA resource
-// water.fx - the river surface (applied to the GTA water texture "waterclear256" with /ncfx 2).
-//   * animated wave normals from procedural noise (two octaves + rain agitation while gWet is high)
-//   * sky reflection approximation (zenith / horizon by the reflected ray, Fresnel) - NOT a real planar
-//     reflection: DX9 / MTA expose no scene reflection texture for the water, so this mirrors the analytic
-//     sky colours the dome shader draws, plus a strong sun glint
-//   * deep colour from the timecycle (gWaterColor), distance haze, lightning flash
+// water.fx - the river / bay / open-sea surface (applied to the GTA water texture "waterclear256"
+//            with /ncfx 2).  A full water redesign:
+//   * two-scale wind waves + fine chop + rain rings and rain agitation (gWet)
+//   * depth-graded body colour: deep teal offshore, brighter turquoise on the shallows, driven by
+//     grazing angle and a slow bathymetry noise shelf
+//   * Fresnel sky reflection (zenith / horizon of the analytic sky dome) with a warm city-glow
+//     band near the horizon at night - the skyline reflects into the water
+//   * sun glint by day / moon glint by night (two specular lobes), lightning flash, aerial haze
 float4x4 gWorld : WORLD;
 float4x4 gWorldViewProjection : WORLDVIEWPROJECTION;
 float3 gCameraPosition : CAMERAPOSITION;
@@ -96,13 +98,20 @@ float vnoise(float2 p)
     return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
 }
 
-// slope of the animated wave field + rain rings while it rains
-float2 waveSlope(float2 p, float t)
+// wind-aligned slope of the animated wave field + rain rings while it rains
+float2 waveSlope(float2 p, float2 wind, float t)
 {
-    float2 s = float2(vnoise(p * 0.9 + float2(t * 0.23, t * 0.11)) - 0.5,
-                      vnoise(p * 0.9 + float2(-t * 0.17, t * 0.29) + 5.7) - 0.5);
-    s += float2(vnoise(p * 2.6 + float2(t * 0.51, -t * 0.33)) - 0.5,
-                vnoise(p * 2.6 + float2(t * 0.41, t * 0.47) + 9.1) - 0.5) * 0.55;
+    float2 w = normalize(wind + float2(0.001, 0.0));
+    float2x2 rot = float2x2(w.x, -w.y, w.y, w.x);
+    float2 q0 = mul(p, rot);
+    // swell (long, wind-aligned) + chop (short, cross) + fine ripple
+    float2 s = float2(vnoise(q0 * float2(0.55, 0.9) + float2(t * 0.20, 0.0)) - 0.5,
+                      vnoise(q0 * float2(0.55, 0.9) + float2(t * 0.20, 3.3)) - 0.5) * 1.15;
+    s += float2(vnoise(p * 2.3 + float2(t * 0.46, -t * 0.31)) - 0.5,
+                vnoise(p * 2.3 + float2(t * 0.37, t * 0.43) + 9.1) - 0.5) * 0.55;
+    s += float2(vnoise(p * 6.5 + float2(t * 0.9, t * 0.6)) - 0.5,
+                vnoise(p * 6.5 + float2(-t * 0.7, t * 0.8) + 2.2) - 0.5) * 0.24;
+    // rain rings
     float2 q = p * 1.4;
     float2 g = floor(q);
     float2 f = frac(q) - 0.5;
@@ -110,7 +119,7 @@ float2 waveSlope(float2 p, float t)
     float r = length(f);
     float k = (r - age * 0.5) * 24.0;
     float ring = exp(-k * k) * (1.0 - age);
-    s += (f / max(r, 0.001)) * ring * 0.8 * gWet;
+    s += (f / max(r, 0.001)) * ring * 0.9 * gWet;
     return s;
 }
 
@@ -118,24 +127,46 @@ float4 PixelShaderFunction(PSInput PS) : COLOR0
 {
     float3 N = normalize(PS.WorldNormal);
     float3 V = normalize(PS.WorldPos - gCameraPosition);
-    float2 slope = waveSlope(PS.WorldPos.xy * 0.22, gTime) * (0.12 + 0.10 * gWet);
+    float dist = length(PS.WorldPos - gCameraPosition);
+    float2 slope = waveSlope(PS.WorldPos.xy * 0.22, gWind, gTime) * (0.13 + 0.11 * gWet);
     float3 Nw = normalize(float3(N.x + slope.x, N.y + slope.y, max(N.z, 0.2)));
 
     float ndv = saturate(dot(-V, Nw));
     float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
     float3 R = reflect(V, Nw);
 
-    // sky reflection approximation + sun glint
+    // ---- depth-graded body colour: deep teal offshore, turquoise on the shallows.
+    // the shallow signal = large bathymetry shelves + a grazing-angle bias (beaches read bright)
+    float shelf = vnoise(PS.WorldPos.xy * 0.0021 + float2(3.7, 8.2)) * 0.65
+                + vnoise(PS.WorldPos.xy * 0.0007 + 1.9) * 0.35;
+    float shallow = saturate(1.25 * (1.0 - ndv) + (shelf - 0.35) * 0.85);
+    float3 deepCol = gWaterColor * (0.55 + 0.45 * gDim);
+    float3 shallowCol = (gWaterColor * 1.35 + float3(0.02, 0.10, 0.09)) * (0.55 + 0.45 * gDim);
+    float3 body = lerp(deepCol, shallowCol, shallow);
+    // crest sparkle: fine whitecaps on the wave tops when it is windy / rainy
+    float crest = saturate((abs(slope.x) + abs(slope.y) - 0.42) * 3.2) * saturate(0.35 + 0.65 * gWet);
+    body += crest * float3(0.10, 0.11, 0.12) * (0.4 + 0.6 * gDim);
+
+    // ---- sky reflection: the analytic dome colours, mirrored along R
     float3 sky = lerp(gHorizon, gZenith, saturate(R.z * 1.35));
-    sky *= 0.85 + 0.5 * saturate(dot(R, gSunDir)) * gSunI;
-    float glint = pow(saturate(dot(R, gSunDir)), 180.0) * 5.5 + pow(saturate(dot(R, gSunDir)), 24.0) * 0.55;
-    float3 col = lerp(gWaterColor * (0.55 + 0.45 * gDim), sky, saturate(fres * 1.25));
-    col += gSunColor * glint * gSunI * (0.35 + 0.65 * fres);
+    // warm city glow band reflected near the horizon at night (the skyline in the water)
+    float3 glow = float3(0.34, 0.19, 0.10) * gNightGlow * (1.0 - saturate(R.z * 4.2)) * 0.55;
+    sky += glow;
+    float sunLobe = saturate(dot(R, gSunDir));
+    float moonLobe = saturate(dot(R, gMoonDir));
+    sky *= 0.85 + 0.5 * sunLobe * gSunI;
+
+    // ---- specular: sun glint by day, soft moon glint at night
+    float glint = pow(sunLobe, 180.0) * 5.5 + pow(sunLobe, 24.0) * 0.55;
+    float mglint = pow(moonLobe, 90.0) * 0.9 + pow(moonLobe, 16.0) * 0.10;
+
+    float3 col = lerp(body, sky, saturate(fres * 1.25));
+    col += gSunColor * glint * max(gSunI, 0.02) * (0.35 + 0.65 * fres);
+    col += float3(0.75, 0.82, 1.0) * mglint * gNight * (0.35 + 0.65 * fres) * 0.55;
     col += gAmbient * 0.35;
 
     // lightning + aerial perspective
     col += gFlash * 0.12;
-    float dist = length(PS.WorldPos - gCameraPosition);
     float fogA = saturate((dist - gFogRange.x) / max(gFogRange.y - gFogRange.x, 1.0));
     col = lerp(col, gFogColor, fogA);
     return float4(saturate(col), 1.0);
