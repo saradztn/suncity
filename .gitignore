@@ -1,0 +1,7 @@
+# build outputs and work files (python3 source/build.py writes the ready resource here)
+resource/
+source/_work/
+source_extracted/
+__pycache__/
+*.pyc
+.venv/
